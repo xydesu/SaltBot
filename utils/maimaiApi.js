@@ -352,5 +352,8 @@ module.exports = {
     searchSongs,
     getRandomSong,
     getGameStats,
-    formatConstant
+    formatConstant,
+    getGenreName,
+    getGenreEmoji,
+    getDifficultyEmoji
 };

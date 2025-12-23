@@ -184,33 +184,3 @@ module.exports = {
         }
     },
 };
-
-function getDifficultyEmoji(difficulty) {
-    const emojis = {
-        basic: '🟢',
-        advanced: '🟡',
-        expert: '🔴',
-        master: '🟣',
-        remaster: '⚪',
-        dx_basic: '🟢',
-        dx_advanced: '🟡',
-        dx_expert: '🔴',
-        dx_master: '🟣',
-        dx_remaster: '⚪'
-    };
-    return emojis[difficulty] || '⚫';
-}
-
-function getGenreEmoji(genre) {
-    const emojis = {
-        pops: '🎵',
-        niconico: '🎮',
-        touhou: '🎯',
-        game: '🎪',
-        maimai: '🎼',
-        ongeki: '🌟',
-        chunithm: '💫',
-        other: '🎵'
-    };
-    return emojis[genre] || '🎵';
-}

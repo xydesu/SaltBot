@@ -278,3 +278,6 @@ MIT License
 ## 支援
 
 如果您遇到任何問題，請創建一個 Issue 或聯繫開發者。
+
+## 銘謝
+[Otoge-DB](https://github.com/zvuc/otoge-db) 曲目數據和封面

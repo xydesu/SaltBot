@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, ApplicationIntegrationType, InteractionContextType } = require('discord.js');
-const { getMaimaiSongs, getGameStats } = require('../../utils/maimaiApi');
+const { getGameStats } = require('../../utils/maimaiApi');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -67,6 +67,11 @@ module.exports = {
                    '• `/maimai-daily` - 每日推薦',
             inline: false
         });
+
+        embed.addFields({
+            name: ':information_source: 銘謝',
+            value: '• [Otoge-DB](https://github.com/zvuc/otoge-db) - 曲目數據和封面'
+        })
         
         await interaction.editReply({ embeds: [embed] });
         
@@ -94,34 +99,4 @@ function getMaimaiTrivia() {
     ];
     
     return trivia[Math.floor(Math.random() * trivia.length)];
-}
-
-function getDifficultyEmoji(difficulty) {
-    const emojis = {
-        basic: '🟢',
-        advanced: '🟡',
-        expert: '🔴',
-        master: '🟣',
-        remaster: '⚪',
-        dx_basic: '🟢',
-        dx_advanced: '🟡',
-        dx_expert: '🔴',
-        dx_master: '🟣',
-        dx_remaster: '⚪'
-    };
-    return emojis[difficulty] || '⚫';
-}
-
-function getGenreEmoji(genre) {
-    const emojis = {
-        pops: '🎵',
-        niconico: '🎮',
-        touhou: '🎯',
-        game: '🎪',
-        maimai: '🎼',
-        ongeki: '🌟',
-        chunithm: '💫',
-        other: '🎵'
-    };
-    return emojis[genre] || '🎵';
 }
