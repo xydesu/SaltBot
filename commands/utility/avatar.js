@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ApplicationIntegrationType, InteractionContextType } = require('discord.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -7,7 +7,9 @@ module.exports = {
         .addUserOption(option =>
             option.setName('user')
                 .setDescription('想看誰的頭像呢にゃ？')
-                .setRequired(false)),
+                .setRequired(false))
+        .setIntegrationTypes([ApplicationIntegrationType.GuildInstall, ApplicationIntegrationType.UserInstall])
+        .setContexts([InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel]),
     async execute(interaction) {
         const user = interaction.options.getUser('user') || interaction.user;
         const member = interaction.guild?.members.cache.get(user.id);
@@ -17,14 +19,14 @@ module.exports = {
             .setTitle(`🖼️ ${user.username} 的美美頭像にゃ`)
             .setImage(user.displayAvatarURL({ dynamic: true, size: 512 }))
             .setTimestamp()
-            .setFooter({ 
-                text: `${interaction.user.username} 想看頭像にゃ`, 
-                iconURL: interaction.user.displayAvatarURL() 
+            .setFooter({
+                text: `${interaction.user.username} 想看頭像にゃ`,
+                iconURL: interaction.user.displayAvatarURL()
             });
 
         // 添加頭像連結按鈕
         const avatarLinks = [];
-        
+
         // 全域頭像連結
         const globalAvatar = user.displayAvatarURL({ dynamic: true, size: 1024 });
         avatarLinks.push(`[1024px](${globalAvatar})`);

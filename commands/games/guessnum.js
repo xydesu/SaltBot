@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ApplicationIntegrationType, InteractionContextType } = require('discord.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -12,43 +12,45 @@ module.exports = {
             option.setName('number')
                 .setDescription('你猜測的數字にゃ')
                 .setMinValue(1)
-                .setRequired(true)),
+                .setRequired(true))
+        .setIntegrationTypes([ApplicationIntegrationType.GuildInstall, ApplicationIntegrationType.UserInstall])
+        .setContexts([InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel]),
     async execute(interaction) {
         const gameId = interaction.options.getString('gameid');
         const guessedNumber = interaction.options.getInteger('number');
-        
+
         // 從 guess.js 獲取活躍遊戲
         const guessCommand = require('./guess.js');
         const activeGames = guessCommand.getActiveGames();
-        
+
         const game = activeGames.get(gameId);
-        
+
         if (!game) {
             return await interaction.reply({
                 content: '❌ 找不到這個遊戲 ID 或遊戲已經結束了にゃ！',
                 ephemeral: true
             });
         }
-        
+
         if (game.userId !== interaction.user.id) {
             return await interaction.reply({
                 content: '❌ 這不是你的遊戲にゃ！',
                 ephemeral: true
             });
         }
-        
+
         if (guessedNumber < 1 || guessedNumber > game.range) {
             return await interaction.reply({
                 content: `❌ 請輸入 1 到 ${game.range} 之間的數字にゃ！`,
                 ephemeral: true
             });
         }
-        
+
         game.attempts++;
         const remainingAttempts = game.maxAttempts - game.attempts;
-        
+
         let embed;
-        
+
         if (guessedNumber === game.targetNumber) {
             // 猜中了！
             const timeTaken = Math.floor((Date.now() - game.startTime) / 1000);
@@ -62,9 +64,9 @@ module.exports = {
                     { name: '🏆 評級', value: getPerformanceRating(game.attempts, game.maxAttempts), inline: true }
                 )
                 .setFooter({ text: 'Salt 說太厲害了にゃ！' });
-            
+
             activeGames.delete(gameId);
-            
+
         } else if (remainingAttempts <= 0) {
             // 機會用完了
             embed = new EmbedBuilder()
@@ -76,9 +78,9 @@ module.exports = {
                     { name: '❌ 嘗試次數', value: `${game.attempts}/${game.maxAttempts}`, inline: true },
                     { name: '🔄', value: '使用 `/guess` 開始新遊戲', inline: true }
                 );
-            
+
             activeGames.delete(gameId);
-            
+
         } else {
             // 繼續遊戲
             const hint = guessedNumber < game.targetNumber ? '📈 Salt 說太小了にゃ！' : '📉 Salt 說太大了にゃ！';
@@ -92,7 +94,7 @@ module.exports = {
                     { name: '💡 提示', value: getHint(guessedNumber, game.targetNumber, game.range), inline: false }
                 );
         }
-        
+
         await interaction.reply({ embeds: [embed] });
     },
 };
@@ -109,7 +111,7 @@ function getPerformanceRating(attempts, maxAttempts) {
 function getHint(guess, target, range) {
     const difference = Math.abs(guess - target);
     const percentDiff = difference / range;
-    
+
     if (percentDiff <= 0.05) return '🔥 非常接近了！';
     if (percentDiff <= 0.1) return '♨️ 很接近！';
     if (percentDiff <= 0.2) return '🌡️ 接近了！';

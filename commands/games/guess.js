@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, ApplicationIntegrationType, InteractionContextType } = require('discord.js');
 
 const activeGames = new Map();
 
@@ -11,12 +11,14 @@ module.exports = {
                 .setDescription('設定數字範圍にゃ (預設1-100)')
                 .setMinValue(10)
                 .setMaxValue(1000)
-                .setRequired(false)),
+                .setRequired(false))
+        .setIntegrationTypes([ApplicationIntegrationType.GuildInstall, ApplicationIntegrationType.UserInstall])
+        .setContexts([InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel]),
     async execute(interaction) {
         const range = interaction.options.getInteger('range') || 100;
         const targetNumber = Math.floor(Math.random() * range) + 1;
         const gameId = `${interaction.user.id}-${Date.now()}`;
-        
+
         // 儲存遊戲狀態
         activeGames.set(gameId, {
             targetNumber,
@@ -48,7 +50,7 @@ module.exports = {
             }
         }, 300000);
     },
-    
+
     // 輔助函數供其他指令使用
     getActiveGames: () => activeGames,
 };

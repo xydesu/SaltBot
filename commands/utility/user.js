@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ApplicationIntegrationType, InteractionContextType } = require('discord.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -7,11 +7,13 @@ module.exports = {
         .addUserOption(option =>
             option.setName('target')
                 .setDescription('想瞭解誰呢にゃ？')
-                .setRequired(false)),
+                .setRequired(false))
+        .setIntegrationTypes([ApplicationIntegrationType.GuildInstall, ApplicationIntegrationType.UserInstall])
+        .setContexts([InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel]),
     async execute(interaction) {
         const user = interaction.options.getUser('target') || interaction.user;
         const member = interaction.guild?.members.cache.get(user.id);
-        
+
         const embed = new EmbedBuilder()
             .setColor(0xFF9900)
             .setTitle(`👤 ${user.username} 的詳細資料にゃ`)
@@ -30,10 +32,10 @@ module.exports = {
             );
 
             if (member.premiumSince) {
-                embed.addFields({ 
-                    name: 'Nitro 加成開始時間', 
-                    value: `<t:${Math.floor(member.premiumSinceTimestamp / 1000)}:F>`, 
-                    inline: false 
+                embed.addFields({
+                    name: 'Nitro 加成開始時間',
+                    value: `<t:${Math.floor(member.premiumSinceTimestamp / 1000)}:F>`,
+                    inline: false
                 });
             }
         }

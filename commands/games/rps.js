@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, ApplicationIntegrationType, InteractionContextType } = require('discord.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -12,20 +12,22 @@ module.exports = {
                     { name: '🪨 石頭', value: 'rock' },
                     { name: '📄 布', value: 'paper' },
                     { name: '✂️ 剪刀', value: 'scissors' }
-                )),
+                ))
+        .setIntegrationTypes([ApplicationIntegrationType.GuildInstall, ApplicationIntegrationType.UserInstall])
+        .setContexts([InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel]),
     async execute(interaction) {
         const userChoice = interaction.options.getString('choice');
-        
+
         if (!userChoice) {
             // 顯示按鈕介面
             const embed = new EmbedBuilder()
                 .setColor(0x00BFFF)
                 .setTitle('🎮 和 Salt 對戰にゃ')
                 .setDescription('選擇你的武器にゃ！我已經準備好了～')
-                .addFields({ 
-                    name: '🎯 遊戲規則', 
-                    value: '石頭勝剪刀，剪刀勝布，布勝石頭', 
-                    inline: false 
+                .addFields({
+                    name: '🎯 遊戲規則',
+                    value: '石頭勝剪刀，剪刀勝布，布勝石頭',
+                    inline: false
                 });
 
             const buttons = new ActionRowBuilder()
@@ -47,16 +49,16 @@ module.exports = {
                         .setStyle(ButtonStyle.Danger)
                 );
 
-            return await interaction.reply({ 
-                embeds: [embed], 
-                components: [buttons] 
+            return await interaction.reply({
+                embeds: [embed],
+                components: [buttons]
             });
         }
-        
+
         // 直接選擇模式
         const result = playRPS(userChoice);
         const embed = createResultEmbed(userChoice, result.botChoice, result.outcome, interaction.user);
-        
+
         await interaction.reply({ embeds: [embed] });
     },
 };
@@ -64,7 +66,7 @@ module.exports = {
 function playRPS(userChoice) {
     const choices = ['rock', 'paper', 'scissors'];
     const botChoice = choices[Math.floor(Math.random() * choices.length)];
-    
+
     let outcome;
     if (userChoice === botChoice) {
         outcome = 'tie';
@@ -77,7 +79,7 @@ function playRPS(userChoice) {
     } else {
         outcome = 'lose';
     }
-    
+
     return { botChoice, outcome };
 }
 
@@ -87,15 +89,15 @@ function createResultEmbed(userChoice, botChoice, outcome, user) {
         paper: '📄',
         scissors: '✂️'
     };
-    
+
     const choiceNames = {
         rock: '石頭',
         paper: '布',
         scissors: '剪刀'
     };
-    
+
     let color, title, description;
-    
+
     switch (outcome) {
         case 'win':
             color = 0x00FF00;
@@ -113,31 +115,31 @@ function createResultEmbed(userChoice, botChoice, outcome, user) {
             description = '英雄所見略同にゃ！';
             break;
     }
-    
+
     return new EmbedBuilder()
         .setColor(color)
         .setTitle(title)
         .setDescription(description)
         .addFields(
-            { 
-                name: '👤 你的選擇', 
-                value: `${choiceEmojis[userChoice]} ${choiceNames[userChoice]}`, 
-                inline: true 
+            {
+                name: '👤 你的選擇',
+                value: `${choiceEmojis[userChoice]} ${choiceNames[userChoice]}`,
+                inline: true
             },
-            { 
-                name: '🤖 Salt 的選擇', 
-                value: `${choiceEmojis[botChoice]} ${choiceNames[botChoice]}`, 
-                inline: true 
+            {
+                name: '🤖 Salt 的選擇',
+                value: `${choiceEmojis[botChoice]} ${choiceNames[botChoice]}`,
+                inline: true
             },
-            { 
-                name: '🎯 結果', 
-                value: outcome === 'win' ? '你勝利にゃ！' : outcome === 'lose' ? 'Salt勝利にゃ！' : '平手にゃ！', 
-                inline: false 
+            {
+                name: '🎯 結果',
+                value: outcome === 'win' ? '你勝利にゃ！' : outcome === 'lose' ? 'Salt勝利にゃ！' : '平手にゃ！',
+                inline: false
             }
         )
-        .setFooter({ 
-            text: `由 ${user.username} 發起`, 
-            iconURL: user.displayAvatarURL() 
+        .setFooter({
+            text: `由 ${user.username} 發起`,
+            iconURL: user.displayAvatarURL()
         })
         .setTimestamp();
 }

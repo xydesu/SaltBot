@@ -1,22 +1,24 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ApplicationIntegrationType, InteractionContextType } = require('discord.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('server')
-        .setDescription('Salt 來介紹這個伺服器にゃ'),
+        .setDescription('Salt 來介紹這個伺服器にゃ')
+        .setIntegrationTypes([ApplicationIntegrationType.GuildInstall, ApplicationIntegrationType.UserInstall])
+        .setContexts([InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel]),
     async execute(interaction) {
         if (!interaction.guild) {
-            return await interaction.reply({ 
-                content: '這個指令只能在伺服器裡用にゃ！', 
-                ephemeral: true 
+            return await interaction.reply({
+                content: '這個指令只能在伺服器裡用にゃ！',
+                ephemeral: true
             });
         }
 
         const guild = interaction.guild;
-        
+
         // 獲取伺服器統計
         const totalMembers = guild.memberCount;
-        const onlineMembers = guild.members.cache.filter(member => 
+        const onlineMembers = guild.members.cache.filter(member =>
             member.presence?.status === 'online').size;
         const botCount = guild.members.cache.filter(member => member.user.bot).size;
         const humanCount = totalMembers - botCount;
