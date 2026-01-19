@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, ApplicationIntegrationType, InteractionContextType } = require('discord.js');
-const { getMaimaiSongs, getRandomSong, formatConstant } = require('../../utils/maimaiApi');
+const { getMaimaiSongs, getRandomSong, formatConstant, getDifficultyEmoji, getGenreEmoji, getGenreName } = require('../../utils/maimaiApi');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -20,103 +20,103 @@ module.exports = {
         .setContexts([InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel]),
     async execute(interaction) {
         await interaction.deferReply();
-        
+
         const type = interaction.options.getString('type') || 'daily';
-        
+
         try {
             // 使用日期作為種子確保每日推薦的一致性
             const today = new Date();
             const dateString = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
             const seed = hashCode(dateString + type);
-            
+
             const songs = await getMaimaiSongs();
             const recommendation = getDailyRecommendation(songs, type, seed);
-        
-        const embed = new EmbedBuilder()
-            .setColor(getTypeColor(type))
-            .setTitle(`${getTypeEmoji(type)} 今日 maimai DX 推薦`)
-            .setDescription(`${getTypeDescription(type)}\n今天就來挑戰這首歌吧！`)
-            .addFields(
-                { name: '🎶 今日推薦', value: `**${recommendation.song.title}**`, inline: false },
-                { name: '🎤 藝術家', value: recommendation.song.artist, inline: true },
-                { name: '📂 類型', value: `${getGenreEmoji(recommendation.song.genre)} ${getGenreName(recommendation.song.genre)}`, inline: true },
-                { name: '🎯 BPM', value: `${recommendation.song.bpm}`, inline: true },
-                { name: '📊 推薦譜面', value: `${getDifficultyEmoji(recommendation.chart.difficulty)} ${recommendation.chart.difficulty.toUpperCase()} ${recommendation.chart.level}`, inline: true },
-                { name: '🎵 定數', value: recommendation.chart.constant !== null ? formatConstant(recommendation.chart.constant) : '未知', inline: true },
-                { name: '💎 Note數', value: `${recommendation.chart.notes}`, inline: true }
-            )
-            .setFooter({ 
-                text: `每日推薦 | ${today.toLocaleDateString('zh-TW')} | 由 ${interaction.user.username} 請求`, 
-                iconURL: interaction.user.displayAvatarURL() 
-            })
-            .setTimestamp();
-        
-        // 設定推薦歌曲的封面圖片
-        if (recommendation.song.imageUrl) {
-            // 檢查是否為完整 URL，如果不是則構建完整 URL
-            let imageUrl = recommendation.song.imageUrl;
-            if (!imageUrl.startsWith('http')) {
-                imageUrl = `https://otoge-db.net/maimai/jacket/${imageUrl}`;
+
+            const embed = new EmbedBuilder()
+                .setColor(getTypeColor(type))
+                .setTitle(`${getTypeEmoji(type)} 今日 maimai DX 推薦`)
+                .setDescription(`${getTypeDescription(type)}\n今天就來挑戰這首歌吧！`)
+                .addFields(
+                    { name: '🎶 今日推薦', value: `**${recommendation.song.title}**`, inline: false },
+                    { name: '🎤 藝術家', value: recommendation.song.artist, inline: true },
+                    { name: '📂 類型', value: `${getGenreEmoji(recommendation.song.genre)} ${getGenreName(recommendation.song.genre)}`, inline: true },
+                    { name: '🎯 BPM', value: `${recommendation.song.bpm}`, inline: true },
+                    { name: '📊 推薦譜面', value: `${getDifficultyEmoji(recommendation.chart.difficulty)} ${recommendation.chart.difficulty.toUpperCase()} ${recommendation.chart.level}`, inline: true },
+                    { name: '🎵 定數', value: recommendation.chart.constant !== null ? formatConstant(recommendation.chart.constant) : '未知', inline: true },
+                    { name: '💎 Note數', value: `${recommendation.chart.notes}`, inline: true }
+                )
+                .setFooter({
+                    text: `每日推薦 | ${today.toLocaleDateString('zh-TW')} | 由 ${interaction.user.username} 請求`,
+                    iconURL: interaction.user.displayAvatarURL()
+                })
+                .setTimestamp();
+
+            // 設定推薦歌曲的封面圖片
+            if (recommendation.song.imageUrl) {
+                // 檢查是否為完整 URL，如果不是則構建完整 URL
+                let imageUrl = recommendation.song.imageUrl;
+                if (!imageUrl.startsWith('http')) {
+                    imageUrl = `https://otoge-db.net/maimai/jacket/${imageUrl}`;
+                }
+
+                try {
+                    embed.setThumbnail(imageUrl);
+                } catch (error) {
+                    console.warn('無法設定歌曲圖片:', imageUrl, error.message);
+                }
             }
-            
-            try {
-                embed.setThumbnail(imageUrl);
-            } catch (error) {
-                console.warn('無法設定歌曲圖片:', imageUrl, error.message);
+
+            // 顯示所有譜面 - 分開 STD 和 DX
+            const stdCharts = recommendation.song.charts.filter(chart => !chart.difficulty.startsWith('dx_'));
+            const dxCharts = recommendation.song.charts.filter(chart => chart.difficulty.startsWith('dx_'));
+
+            let allChartsDisplay = '';
+
+            if (stdCharts.length > 0) {
+                allChartsDisplay += '**STD:**\n';
+                allChartsDisplay += stdCharts.map(chart =>
+                    `${getDifficultyEmoji(chart.difficulty)} ${chart.difficulty.toUpperCase()} ${chart.level}${chart.constant !== null ? ` (${formatConstant(chart.constant)})` : ''}`
+                ).join('\n');
             }
-        }
-        
-        // 顯示所有譜面 - 分開 STD 和 DX
-        const stdCharts = recommendation.song.charts.filter(chart => !chart.difficulty.startsWith('dx_'));
-        const dxCharts = recommendation.song.charts.filter(chart => chart.difficulty.startsWith('dx_'));
-        
-        let allChartsDisplay = '';
-        
-        if (stdCharts.length > 0) {
-            allChartsDisplay += '**STD:**\n';
-            allChartsDisplay += stdCharts.map(chart => 
-                `${getDifficultyEmoji(chart.difficulty)} ${chart.difficulty.toUpperCase()} ${chart.level}${chart.constant !== null ? ` (${formatConstant(chart.constant)})` : ''}`
-            ).join('\n');
-        }
-        
-        if (dxCharts.length > 0) {
-            if (allChartsDisplay) allChartsDisplay += '\n\n';
-            allChartsDisplay += '**DX:**\n';
-            allChartsDisplay += dxCharts.map(chart => 
-                `${getDifficultyEmoji(chart.difficulty.replace('dx_', ''))} ${chart.difficulty.replace('dx_', '').toUpperCase()} ${chart.level}${chart.constant !== null ? ` (${formatConstant(chart.constant)})` : ''}`
-            ).join('\n');
-        }
-        
-        embed.addFields({ 
-            name: '📋 所有譜面', 
-            value: allChartsDisplay || '無譜面資料', 
-            inline: false 
-        });
-        
-        // 添加每日挑戰
-        const challenge = getDailyChallenge(recommendation.chart, seed);
-        embed.addFields({
-            name: '🏆 今日挑戰',
-            value: challenge,
-            inline: false
-        });
-        
-        // 添加練習建議
-        embed.addFields({
-            name: '💡 練習建議',
-            value: getPracticeTip(recommendation.chart, type),
-            inline: false
-        });
-        
-        // 添加其他用戶也可以看到相同推薦的提示
-        embed.addFields({
-            name: '🌟 特別提醒',
-            value: '所有人今天看到的推薦都是一樣的喔！快去和朋友一起挑戰吧！',
-            inline: false
-        });
-        
-        await interaction.editReply({ embeds: [embed] });
-        
+
+            if (dxCharts.length > 0) {
+                if (allChartsDisplay) allChartsDisplay += '\n\n';
+                allChartsDisplay += '**DX:**\n';
+                allChartsDisplay += dxCharts.map(chart =>
+                    `${getDifficultyEmoji(chart.difficulty.replace('dx_', ''))} ${chart.difficulty.replace('dx_', '').toUpperCase()} ${chart.level}${chart.constant !== null ? ` (${formatConstant(chart.constant)})` : ''}`
+                ).join('\n');
+            }
+
+            embed.addFields({
+                name: '📋 所有譜面',
+                value: allChartsDisplay || '無譜面資料',
+                inline: false
+            });
+
+            // 添加每日挑戰
+            const challenge = getDailyChallenge(recommendation.chart, seed);
+            embed.addFields({
+                name: '🏆 今日挑戰',
+                value: challenge,
+                inline: false
+            });
+
+            // 添加練習建議
+            embed.addFields({
+                name: '💡 練習建議',
+                value: getPracticeTip(recommendation.chart, type),
+                inline: false
+            });
+
+            // 添加其他用戶也可以看到相同推薦的提示
+            embed.addFields({
+                name: '🌟 特別提醒',
+                value: '所有人今天看到的推薦都是一樣的喔！快去和朋友一起挑戰吧！',
+                inline: false
+            });
+
+            await interaction.editReply({ embeds: [embed] });
+
         } catch (error) {
             console.error('獲取 maimai 每日推薦時發生錯誤:', error);
             await interaction.editReply({
@@ -140,7 +140,7 @@ function hashCode(str) {
 function getDailyRecommendation(songs, type, seed) {
     let filteredSongs = [...songs];
     let levelFilter = null;
-    
+
     // 根據類型篩選歌曲 - 考慮到高難度定數差距更大
     switch (type) {
         case 'morning':
@@ -164,21 +164,21 @@ function getDailyRecommendation(songs, type, seed) {
             levelFilter = () => true;
             break;
     }
-    
+
     // 篩選有符合條件譜面的歌曲
-    filteredSongs = filteredSongs.filter(song => 
+    filteredSongs = filteredSongs.filter(song =>
         song.charts.some(levelFilter)
     );
-    
+
     // 使用種子選擇歌曲
     const songIndex = seed % filteredSongs.length;
     const selectedSong = filteredSongs[songIndex];
-    
+
     // 選擇符合條件的譜面
     const validCharts = selectedSong.charts.filter(levelFilter);
     const chartIndex = Math.floor(seed / filteredSongs.length) % validCharts.length;
     const selectedChart = validCharts[chartIndex];
-    
+
     return {
         song: selectedSong,
         chart: selectedChart
@@ -222,7 +222,7 @@ function getDailyChallenge(chart, seed) {
     // 根據難度等級調整挑戰目標
     const level = chart.level;
     let challenges = [];
-    
+
     if (level <= 8) {
         // 低難度：重點在學習和熟練
         challenges = [
@@ -261,14 +261,14 @@ function getDailyChallenge(chart, seed) {
             `⏰ 耐心：多次嘗試，每次都有進步`
         ];
     }
-    
+
     return challenges[seed % challenges.length];
 }
 
 function getPracticeTip(chart, type) {
     const level = chart.level;
     let baseTips = [];
-    
+
     if (level <= 8) {
         // 低難度練習建議
         baseTips = [
@@ -307,7 +307,7 @@ function getPracticeTip(chart, type) {
             '適當休息，避免過度練習造成疲勞'
         ];
     }
-    
+
     const levelTips = {
         morning: '新手友好區域，重點學習基礎',
         daily: '穩步提升，追求精確和穩定',
@@ -315,7 +315,7 @@ function getPracticeTip(chart, type) {
         hell: '頂尖玩家的領域，每一個等級都是巨大的挑戰',
         random: '保持開放心態，享受各種難度的樂趣'
     };
-    
+
     const tipIndex = chart.level % baseTips.length;
     return `${baseTips[tipIndex]}\n💡 ${levelTips[type] || '享受遊戲過程！'}`;
 }
