@@ -88,6 +88,17 @@ function rawRequest(urlOrString, options = {}, body = null) {
     });
 }
 
+/**
+ * 判斷 HTML 是否為 SEGA 登入頁面
+ * @param {string} html
+ * @returns {boolean}
+ */
+function isSegaLoginPage(html) {
+    // 使用具體的表單欄位名稱，避免誤判包含 'segaId' 字串的一般頁面
+    return html.includes('common_auth/login') ||
+        /name=["']segaId["']/.test(html);
+}
+
 class MaimaiSession {
     constructor() {
         /** @type {Record<string, string>} */
@@ -143,7 +154,7 @@ class MaimaiSession {
                 redirects++;
                 continue;
             }
-            return res;
+            return { ...res, finalUrl: current };
         }
         throw new Error('超過最大重定向次數');
     }
@@ -197,7 +208,7 @@ class MaimaiSession {
         const homeRes = await this._get(MAIMAI_BASE_URL);
 
         // 若已登入（狀態 200 且無重定向到 SEGA 認證），直接判定成功
-        if (homeRes.statusCode === 200 && !homeRes.body.includes('segaId')) {
+        if (homeRes.statusCode === 200 && !isSegaLoginPage(homeRes.body)) {
             this._loggedIn = true;
             this._loginTime = Date.now();
             console.log('[MaimaiSession] 已存在有效 Session にゃ');
@@ -205,9 +216,18 @@ class MaimaiSession {
         }
 
         // 步驟 2：取得 SEGA 認證頁面（_get 已自動跟隨重定向）
-        // 此時 homeRes 應已是 SEGA 認證頁面的內容
+        // 使用真實重定向後的最終 URL（含 service_id、redirect_url 等查詢參數）
+        // 使用 URL 解析正確比對主機名，避免路徑中出現主機名而被誤判
         let authPageHtml = homeRes.body;
-        let authPageUrl = `https://${SEGA_AUTH_HOST}${SEGA_AUTH_PATH}`;
+        let authPageUrl;
+        try {
+            const finalUrlObj = new URL(homeRes.finalUrl);
+            authPageUrl = finalUrlObj.hostname === SEGA_AUTH_HOST
+                ? homeRes.finalUrl
+                : `https://${SEGA_AUTH_HOST}${SEGA_AUTH_PATH}`;
+        } catch {
+            authPageUrl = `https://${SEGA_AUTH_HOST}${SEGA_AUTH_PATH}`;
+        }
 
         // 若 _get 最終停在 SEGA 認證頁面，萃取 token 等隱藏欄位
         const token = extractInputValue(authPageHtml, 'token');
@@ -217,11 +237,13 @@ class MaimaiSession {
             console.log('[MaimaiSession] 嘗試直接存取 SEGA 認證頁面にゃ…');
             const authRes = await this._get(authPageUrl);
             authPageHtml = authRes.body;
+            // 更新為最終 URL
+            if (authRes.finalUrl) authPageUrl = authRes.finalUrl;
         }
 
         const csrfToken = extractInputValue(authPageHtml, 'token') || '';
 
-        // 步驟 3：POST 憑證到 SEGA 認證端點
+        // 步驟 3：POST 憑證到 SEGA 認證端點（使用含查詢參數的完整 URL）
         console.log('[MaimaiSession] 正在提交 SEGA ID 憑證にゃ…');
         const postRes = await this._post(authPageUrl, {
             segaId,
@@ -246,7 +268,7 @@ class MaimaiSession {
         }
 
         // 若頁面仍要求登入則視為失敗
-        if (verifyRes.body.includes('common_auth/login') || verifyRes.body.includes('segaId')) {
+        if (isSegaLoginPage(verifyRes.body)) {
             throw new Error('帳號或密碼錯誤，登入 maimai DX 失敗にゃ');
         }
 
@@ -287,13 +309,13 @@ class MaimaiSession {
         const res = await this._get(url);
 
         // 若被重定向到登入頁，嘗試重新登入一次
-        if (res.body.includes('common_auth/login') || res.body.includes('segaId')) {
+        if (isSegaLoginPage(res.body)) {
             console.log('[MaimaiSession] Session 已過期，重新登入にゃ…');
             this._loggedIn = false;
             await this.ensureSession();
             const retryRes = await this._get(url);
             // 若重新登入後仍無法存取，拋出錯誤
-            if (retryRes.body.includes('common_auth/login') || retryRes.body.includes('segaId')) {
+            if (isSegaLoginPage(retryRes.body)) {
                 throw new Error('Session 過期且自動重新登入失敗，請重新執行 /maimai-login にゃ');
             }
             return retryRes;
@@ -325,5 +347,6 @@ class MaimaiSession {
     }
 }
 
+// 匯出單例實例（預設使用環境變數），同時匯出類別供每用戶 Session 使用
 module.exports = new MaimaiSession();
 module.exports.MaimaiSession = MaimaiSession;
