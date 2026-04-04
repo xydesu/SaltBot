@@ -53,8 +53,6 @@ function rawRequest(urlOrString, options = {}, body = null) {
             timeout: LOGIN_TIMEOUT_MS,
         };
 
-        console.debug(`[rawRequest] --> ${reqOptions.method} ${url.toString()}`);
-        console.debug(`[rawRequest]     Request headers: ${JSON.stringify(options.headers || {})}`);
 
         const req = lib.request(reqOptions, (res) => {
             const encoding = (res.headers['content-encoding'] || '').toLowerCase();
@@ -70,12 +68,8 @@ function rawRequest(urlOrString, options = {}, body = null) {
             let data = '';
             stream.on('data', chunk => { data += chunk; });
             stream.on('end', () => {
-                console.debug(`[rawRequest] <-- ${res.statusCode} ${url.toString()}`);
-                console.debug(`[rawRequest]     Response headers: ${JSON.stringify(res.headers)}`);
                 if (res.headers['set-cookie']) {
-                    console.debug(`[rawRequest]     Set-Cookie: ${JSON.stringify(res.headers['set-cookie'])}`);
                 }
-                console.debug(`[rawRequest]     Body snippet: ${data.slice(0, 500)}`);
                 resolve({
                     statusCode: res.statusCode,
                     headers: res.headers,
@@ -83,17 +77,14 @@ function rawRequest(urlOrString, options = {}, body = null) {
                 });
             });
             stream.on('error', (err) => {
-                console.debug(`[rawRequest]     Decompression error: ${err.message}`);
                 reject(err);
             });
         });
 
         req.on('error', (err) => {
-            console.debug(`[rawRequest]     Request error: ${err.message}`);
             reject(err);
         });
         req.on('timeout', () => {
-            console.debug(`[rawRequest]     Request timed out: ${url.toString()}`);
             req.destroy();
             reject(new Error('請求超時'));
         });
@@ -156,7 +147,6 @@ class MaimaiSession {
         let redirects = 0;
         const MAX_REDIRECTS = 10;
 
-        console.debug(`[_get] Starting GET ${current}`);
 
         while (redirects < MAX_REDIRECTS) {
             const headers = {
@@ -175,12 +165,10 @@ class MaimaiSession {
 
             if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
                 const next = new URL(res.headers.location, current).toString();
-                console.debug(`[_get] Redirect ${redirects + 1}: ${current} --> ${next}`);
                 current = next;
                 redirects++;
                 continue;
             }
-            console.debug(`[_get] Final URL: ${current} (status ${res.statusCode})`);
             return { ...res, finalUrl: current };
         }
         throw new Error('超過最大重定向次數');
@@ -203,20 +191,8 @@ class MaimaiSession {
             headers['Cookie'] = this._cookieHeader();
         }
 
-        // Log form fields with password redacted
-        const debugFields = Object.fromEntries(
-            Object.entries(formData).map(([k, v]) => [k, k === 'password' ? '***' : v])
-        );
-        console.debug(`[_post] POST ${url}`);
-        console.debug(`[_post] Form fields: ${JSON.stringify(debugFields)}`);
-
         const res = await rawRequest(url, { method: 'POST', headers }, body);
         this._storeCookies(res.headers['set-cookie']);
-
-        console.debug(`[_post] Response status: ${res.statusCode}`);
-        if (res.headers.location) {
-            console.debug(`[_post] Location: ${res.headers.location}`);
-        }
 
         return res;
     }
@@ -247,9 +223,6 @@ class MaimaiSession {
         console.log('[MaimaiSession] 正在存取 maimai DX 首頁にゃ…');
         const homeRes = await this._get(MAIMAI_BASE_URL);
 
-        console.debug(`[login] Step 1: homeRes status=${homeRes.statusCode} finalUrl=${homeRes.finalUrl}`);
-        console.debug(`[login] Step 1: isSegaLoginPage=${isSegaLoginPage(homeRes.body, homeRes.finalUrl)}`);
-        console.debug(`[login] Step 1: body snippet: ${homeRes.body.slice(0, 300)}`);
 
         // 若已登入（狀態 200 且無重定向到 SEGA 認證），直接判定成功
         if (homeRes.statusCode === 200 && !isSegaLoginPage(homeRes.body, homeRes.finalUrl)) {
@@ -271,45 +244,34 @@ class MaimaiSession {
         } catch {
             authPageUrl = `https://${SEGA_AUTH_HOST}${SEGA_AUTH_PATH}`;
         }
-        console.debug(`[login] Step 2: authPageUrl=${authPageUrl}`);
         console.log('[MaimaiSession] 正在取得 SEGA 登入表單にゃ…');
         const authRes = await this._get(authPageUrl);
         if (authRes.finalUrl) authPageUrl = authRes.finalUrl;
-        console.debug(`[login] Step 2: authRes status=${authRes.statusCode} finalUrl=${authRes.finalUrl}`);
-        console.debug(`[login] Step 2: body snippet: ${authRes.body.slice(0, 300)}`);
 
         // 步驟 3：POST 憑證到 SEGA 登入端點
         // 表單 action="/common_auth/login/sid"，欄位為 sid / password / retention
         const postUrl = `https://${SEGA_AUTH_HOST}${SEGA_AUTH_POST_PATH}`;
         console.log('[MaimaiSession] 正在提交 SEGA ID 憑證にゃ…');
-        console.debug(`[login] Step 3: POSTing to ${postUrl}`);
         const postRes = await this._post(postUrl, {
             sid: segaId,
             password,
             retention: '1',
         });
 
-        console.debug(`[login] Step 3: postRes status=${postRes.statusCode} location=${postRes.headers.location || '(none)'}`);
 
         // 步驟 4：跟隨登入後的重定向回 maimai
         if (postRes.statusCode >= 300 && postRes.statusCode < 400 && postRes.headers.location) {
             console.log('[MaimaiSession] 跟隨登入後重定向にゃ…');
-            console.debug(`[login] Step 4: following redirect to ${postRes.headers.location}`);
             await this._get(postRes.headers.location);
         } else if (postRes.statusCode !== 200) {
-            console.debug(`[login] Step 4: unexpected status ${postRes.statusCode}, body: ${postRes.body.slice(0, 300)}`);
             throw new Error(`SEGA 認證回應非預期狀態碼: ${postRes.statusCode}`);
         } else {
-            console.debug(`[login] Step 4: POST returned 200, no redirect. Body snippet: ${postRes.body.slice(0, 300)}`);
         }
 
         // 步驟 5：驗證登入狀態
         console.log('[MaimaiSession] 驗證登入狀態にゃ…');
         const verifyRes = await this._get(MAIMAI_BASE_URL);
 
-        console.debug(`[login] Step 5: verifyRes status=${verifyRes.statusCode} finalUrl=${verifyRes.finalUrl}`);
-        console.debug(`[login] Step 5: isSegaLoginPage=${isSegaLoginPage(verifyRes.body, verifyRes.finalUrl)}`);
-        console.debug(`[login] Step 5: body snippet: ${verifyRes.body.slice(0, 300)}`);
 
         if (verifyRes.statusCode !== 200) {
             throw new Error(`登入驗證失敗，狀態碼: ${verifyRes.statusCode}`);
@@ -354,19 +316,15 @@ class MaimaiSession {
     async authenticatedGet(path) {
         await this.ensureSession();
         const url = new URL(path, MAIMAI_BASE_URL).toString();
-        console.debug(`[authenticatedGet] GET ${url}`);
         const res = await this._get(url);
 
-        console.debug(`[authenticatedGet] status=${res.statusCode} finalUrl=${res.finalUrl} isSegaLoginPage=${isSegaLoginPage(res.body, res.finalUrl)}`);
 
         // 若被重定向到登入頁，嘗試重新登入一次
         if (isSegaLoginPage(res.body, res.finalUrl)) {
             console.log('[MaimaiSession] Session 已過期，重新登入にゃ…');
-            console.debug(`[authenticatedGet] Login page detected, triggering re-login. Body snippet: ${res.body.slice(0, 200)}`);
             this._loggedIn = false;
             await this.ensureSession();
             const retryRes = await this._get(url);
-            console.debug(`[authenticatedGet] Retry status=${retryRes.statusCode} isSegaLoginPage=${isSegaLoginPage(retryRes.body, retryRes.finalUrl)}`);
             // 若重新登入後仍無法存取，拋出錯誤
             if (isSegaLoginPage(retryRes.body, retryRes.finalUrl)) {
                 throw new Error('Session 過期且自動重新登入失敗，請重新執行 /maimai-login にゃ');
