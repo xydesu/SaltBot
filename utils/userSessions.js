@@ -1,11 +1,12 @@
 const { MaimaiSession, MAIMAI_BASE_URL_INT, MAIMAI_BASE_URL_JP } = require('./maimaiSession');
+const db = require('./database');
 
 /**
  * 每位 Discord 用戶各自的 maimai DX Session 管理器。
- * 以用戶 Discord ID 作為鍵，分別儲存國際版（INT）與日本版（JP）的 Session。
- * 並記錄每位用戶的主要伺服器偏好。
+ * 伺服器偏好永久儲存於 SQLite；Session（Cookie）僅存於記憶體。
  *
- * 注意：Session 僅存於記憶體中，機器人重啟後所有用戶需重新登入。
+ * 由於國際版與日本版共用相同的 SEGA 帳號密碼，
+ * 登入時會同時對兩個伺服器進行認證。
  */
 class UserSessionStore {
     constructor() {
@@ -13,17 +14,17 @@ class UserSessionStore {
         this._intSessions = new Map();
         /** @type {Map<string, MaimaiSession>} 日本版 sessions */
         this._jpSessions = new Map();
-        /** @type {Map<string, 'INT'|'JP'>} 每位用戶的主要伺服器偏好 */
-        this._serverPrefs = new Map();
     }
 
+    // ── 伺服器偏好（SQLite 永久儲存） ─────────────────────────────
+
     /**
-     * 設定用戶的主要伺服器偏好
+     * 設定用戶的主要伺服器偏好並寫入資料庫
      * @param {string} userId Discord 用戶 ID
      * @param {'INT'|'JP'} server
      */
     setServer(userId, server) {
-        this._serverPrefs.set(userId, server);
+        db.setServer(userId, server);
     }
 
     /**
@@ -32,8 +33,10 @@ class UserSessionStore {
      * @returns {'INT'|'JP'}
      */
     getServer(userId) {
-        return this._serverPrefs.get(userId) || 'INT';
+        return db.getServer(userId);
     }
+
+    // ── Session 管理 ──────────────────────────────────────────────
 
     /**
      * 取得或建立指定用戶的 Session 實例。
@@ -57,6 +60,25 @@ class UserSessionStore {
     }
 
     /**
+     * 以相同的 SEGA 憑證同時登入國際版與日本版。
+     * @param {string} userId Discord 用戶 ID
+     * @param {string} segaId SEGA ID
+     * @param {string} password SEGA 密碼
+     * @returns {Promise<{ int: Error|null, jp: Error|null }>} 各伺服器的登入錯誤（null 表示成功）
+     */
+    async loginBoth(userId, segaId, password) {
+        const intSession = this.getSession(userId, 'INT');
+        const jpSession  = this.getSession(userId, 'JP');
+
+        const [intErr, jpErr] = await Promise.all([
+            intSession.login(segaId, password).then(() => null).catch(e => e),
+            jpSession.login(segaId, password).then(() => null).catch(e => e),
+        ]);
+
+        return { int: intErr, jp: jpErr };
+    }
+
+    /**
      * 指定用戶是否已登入（檢查其主要伺服器的 Session）
      * @param {string} userId Discord 用戶 ID
      * @returns {boolean}
@@ -70,27 +92,16 @@ class UserSessionStore {
     }
 
     /**
-     * 移除指定用戶的 Session（登出）。
-     * 若未指定伺服器，移除其主要伺服器的 Session。
+     * 清除用戶的所有 Session（兩個伺服器均登出）
      * @param {string} userId Discord 用戶 ID
-     * @param {'INT'|'JP'} [server] 指定伺服器（省略時使用偏好）
      */
-    removeSession(userId, server = null) {
-        const srv = server || this.getServer(userId);
-        if (srv === 'JP') {
-            const session = this._jpSessions.get(userId);
-            if (session) {
-                session.clearSession();
-                this._jpSessions.delete(userId);
-            }
-        } else {
-            const session = this._intSessions.get(userId);
-            if (session) {
-                session.clearSession();
-                this._intSessions.delete(userId);
-            }
-        }
+    removeSession(userId) {
+        const intSession = this._intSessions.get(userId);
+        if (intSession) { intSession.clearSession(); this._intSessions.delete(userId); }
+        const jpSession = this._jpSessions.get(userId);
+        if (jpSession)  { jpSession.clearSession();  this._jpSessions.delete(userId); }
     }
 }
 
 module.exports = new UserSessionStore();
+

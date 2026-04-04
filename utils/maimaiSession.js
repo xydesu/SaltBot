@@ -268,7 +268,6 @@ class MaimaiSession {
             await this._get(postRes.headers.location);
         } else if (postRes.statusCode !== 200) {
             throw new Error(`SEGA 認證回應非預期狀態碼: ${postRes.statusCode}`);
-        } else {
         }
 
         // 步驟 5：驗證登入狀態

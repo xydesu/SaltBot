@@ -28,14 +28,18 @@ module.exports = {
 
         // 若已登入，直接告知狀態
         if (userSessions.isLoggedIn(userId)) {
-            const status = userSessions.getSession(userId).getStatus();
+            const intStatus = userSessions.getSession(userId, 'INT').getStatus();
+            const jpStatus  = userSessions.getSession(userId, 'JP').getStatus();
+            const primaryStatus = server === 'JP' ? jpStatus : intStatus;
             const embed = new EmbedBuilder()
                 .setColor(0x00C851)
                 .setTitle('✅ 你已經登入了にゃ！')
                 .setDescription('Salt 發現你已經登入 maimai DX 了にゃ～')
                 .addFields(
-                    { name: '🌐 伺服器', value: SERVER_LABELS[server], inline: true },
-                    { name: '🕐 登入時間', value: `<t:${Math.floor(status.loginTime / 1000)}:R>`, inline: true }
+                    { name: '⭐ 主要伺服器', value: SERVER_LABELS[server], inline: true },
+                    { name: '🕐 登入時間', value: `<t:${Math.floor(primaryStatus.loginTime / 1000)}:R>`, inline: true },
+                    { name: '🌏 國際版', value: intStatus.loggedIn ? '✅ 已登入' : '❌ 未登入', inline: true },
+                    { name: '🇯🇵 日本版', value: jpStatus.loggedIn  ? '✅ 已登入' : '❌ 未登入', inline: true },
                 )
                 .setFooter({ text: '使用 /maimai-logout 可以登出にゃ', iconURL: interaction.user.displayAvatarURL() })
                 .setTimestamp();
@@ -46,7 +50,7 @@ module.exports = {
         // 顯示登入 Modal
         const modal = new ModalBuilder()
             .setCustomId('maimai_login_modal')
-            .setTitle(`登入 SEGA 帳號 (${server === 'JP' ? '日本版' : '國際版'})にゃ`);
+            .setTitle('登入 SEGA 帳號にゃ');
 
         const segaIdInput = new TextInputBuilder()
             .setCustomId('sega_id')
