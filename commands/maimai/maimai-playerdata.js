@@ -138,6 +138,7 @@ module.exports = {
             }
 
             const playerData = parsePlayerData(res.body);
+            console.log(`[maimai-playerdata] 回應 body 前 500 字元: ${res.body?.substring(0, 500).replace(/\n/g, ' ')}`);
             const parsedFields = Object.keys(playerData).filter(k => playerData[k] != null);
             console.log(`[maimai-playerdata] 解析完成，取得欄位: [${parsedFields.join(', ')}]`);
             console.log(`[maimai-playerdata] 解析結果: name="${playerData.name}" rating="${playerData.rating}" classRank="${playerData.classRank}" playCount="${playerData.playCount}" stars="${playerData.stars}" friendCode="${playerData.friendCode}" title="${playerData.title}"`);
