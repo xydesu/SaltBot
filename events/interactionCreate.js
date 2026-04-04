@@ -241,9 +241,55 @@ module.exports = {
                 await handleSongAnswerModal(interaction);
                 return;
             }
+
+            if (interaction.customId === 'maimai_login_modal') {
+                await handleMaimaiLoginModal(interaction);
+                return;
+            }
         }
     },
 };
+
+async function handleMaimaiLoginModal(interaction) {
+    const { EmbedBuilder } = require('discord.js');
+    const userSessions = require('../utils/userSessions');
+
+    const segaId = interaction.fields.getTextInputValue('sega_id').trim();
+    const password = interaction.fields.getTextInputValue('sega_password');
+
+    // 立即延遲回覆（登入需要幾秒）
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+        const session = userSessions.getSession(interaction.user.id);
+        await session.login(segaId, password);
+
+        const embed = new EmbedBuilder()
+            .setColor(0x00C851)
+            .setTitle('✅ 登入成功！')
+            .setDescription('Salt 幫你成功登入 maimai DX 了にゃ～')
+            .addFields(
+                { name: '👤 帳號', value: segaId, inline: true },
+                { name: '🕐 登入時間', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true }
+            )
+            .setFooter({ text: 'Session 有效期為 1 小時にゃ，使用 /maimai-logout 可以登出', iconURL: interaction.user.displayAvatarURL() })
+            .setTimestamp();
+
+        await interaction.editReply({ embeds: [embed] });
+    } catch (error) {
+        console.error(`[MaimaiLogin] 用戶 ${interaction.user.id} 登入失敗:`, error.message);
+
+        const embed = new EmbedBuilder()
+            .setColor(0xFF4444)
+            .setTitle('❌ 登入失敗にゃ')
+            .setDescription('Salt 無法幫你登入 maimai DX にゃ，請確認帳號和密碼是否正確にゃ')
+            .addFields({ name: '❓ 錯誤原因', value: error.message || '未知錯誤', inline: false })
+            .setFooter({ text: '如果問題持續，請稍後再試にゃ', iconURL: interaction.user.displayAvatarURL() })
+            .setTimestamp();
+
+        await interaction.editReply({ embeds: [embed] });
+    }
+}
 
 // 輔助函數
 function createGameEmbed(gameId, songs, revealedLetters, wrongLetters, remainingWrongGuesses) {

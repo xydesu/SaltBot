@@ -96,6 +96,10 @@ class MaimaiSession {
         this._loginTime = 0;
         /** @type {Promise<void>|null} */
         this._loginPromise = null;
+        /** @type {string|null} stored for automatic re-login (in-memory only, cleared on clearSession) */
+        this._segaId = null;
+        /** @type {string|null} stored for automatic re-login (in-memory only, cleared on clearSession) */
+        this._password = null;
     }
 
     // ── Cookie 管理 ───────────────────────────────────────────────
@@ -170,19 +174,23 @@ class MaimaiSession {
 
     /**
      * 登入 maimaidx-eng.com。
-     * 使用環境變數 MAIMAI_SEGA_ID 和 MAIMAI_PASSWORD。
-     * @throws {Error} 若憑證未設定或登入失敗
+     * @param {string} [segaId] SEGA ID（省略時使用環境變數 MAIMAI_SEGA_ID）
+     * @param {string} [password] 密碼（省略時使用環境變數 MAIMAI_PASSWORD）
+     * @throws {Error} 若憑證未提供或登入失敗
      */
-    async login() {
-        const segaId = process.env.MAIMAI_SEGA_ID;
-        const password = process.env.MAIMAI_PASSWORD;
+    async login(segaId, password) {
+        segaId = segaId || process.env.MAIMAI_SEGA_ID;
+        password = password || process.env.MAIMAI_PASSWORD;
 
         if (!segaId || !password) {
-            throw new Error('MAIMAI_SEGA_ID 或 MAIMAI_PASSWORD 環境變數未設定にゃ');
+            throw new Error('未提供 SEGA 帳號或密碼にゃ');
         }
 
         this._loggedIn = false;
         this._cookies = {};
+        // 儲存憑證供自動重新登入使用
+        this._segaId = segaId;
+        this._password = password;
 
         // 步驟 1：存取 maimai 首頁，取得 SEGA 認證重定向 URL
         console.log('[MaimaiSession] 正在存取 maimai DX 首頁にゃ…');
@@ -248,7 +256,7 @@ class MaimaiSession {
     }
 
     /**
-     * 確保 Session 有效（若未登入或已過期則重新登入）。
+     * 確保 Session 有效（若未登入或已過期則使用已儲存的憑證重新登入）。
      * 此方法為執行緒安全的（防止同時多次登入）。
      */
     async ensureSession() {
@@ -261,7 +269,7 @@ class MaimaiSession {
             return this._loginPromise;
         }
 
-        this._loginPromise = this.login().finally(() => {
+        this._loginPromise = this.login(this._segaId, this._password).finally(() => {
             this._loginPromise = null;
         });
 
@@ -283,7 +291,12 @@ class MaimaiSession {
             console.log('[MaimaiSession] Session 已過期，重新登入にゃ…');
             this._loggedIn = false;
             await this.ensureSession();
-            return this._get(url);
+            const retryRes = await this._get(url);
+            // 若重新登入後仍無法存取，拋出錯誤
+            if (retryRes.body.includes('common_auth/login') || retryRes.body.includes('segaId')) {
+                throw new Error('Session 過期且自動重新登入失敗，請重新執行 /maimai-login にゃ');
+            }
+            return retryRes;
         }
 
         return res;
@@ -301,13 +314,16 @@ class MaimaiSession {
     }
 
     /**
-     * 清除目前 Session（登出）
+     * 清除目前 Session（登出），同時清除儲存的憑證
      */
     clearSession() {
         this._cookies = {};
         this._loggedIn = false;
         this._loginTime = 0;
+        this._segaId = null;
+        this._password = null;
     }
 }
 
 module.exports = new MaimaiSession();
+module.exports.MaimaiSession = MaimaiSession;
