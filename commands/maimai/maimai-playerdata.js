@@ -70,8 +70,11 @@ module.exports = {
         await interaction.deferReply({ ephemeral: true });
 
         const userId = interaction.user.id;
+        const server = userSessions.getServer(userId);
+        console.log(`[maimai-playerdata] 指令觸發 userId=${userId} server=${server}`);
 
         if (!userSessions.isLoggedIn(userId)) {
+            console.log(`[maimai-playerdata] 用戶 ${userId} 尚未登入，拒絕執行`);
             const embed = new EmbedBuilder()
                 .setColor(0xFF6B6B)
                 .setTitle('❌ 尚未登入にゃ')
@@ -80,13 +83,16 @@ module.exports = {
             return interaction.editReply({ embeds: [embed] });
         }
 
-        const server = userSessions.getServer(userId);
+        console.log(`[maimai-playerdata] 用戶 ${userId} 已登入，取得 Session`);
         const session = userSessions.getSession(userId);
 
         try {
+            console.log(`[maimai-playerdata] 正在向伺服器請求玩家資料... (playerData/)`);
             const res = await session.authenticatedGet('playerData/');
+            console.log(`[maimai-playerdata] HTTP 回應: statusCode=${res.statusCode} bodyLength=${res.body?.length ?? 0} 字元`);
 
             if (res.statusCode !== 200) {
+                console.warn(`[maimai-playerdata] 非預期狀態碼 ${res.statusCode}，停止處理`);
                 const embed = new EmbedBuilder()
                     .setColor(0xFF6B6B)
                     .setTitle('❌ 無法取得玩家資料にゃ')
@@ -96,6 +102,9 @@ module.exports = {
             }
 
             const playerData = parsePlayerData(res.body);
+            const parsedFields = Object.keys(playerData).filter(k => playerData[k] != null);
+            console.log(`[maimai-playerdata] 解析完成，取得欄位: [${parsedFields.join(', ')}]`);
+            console.log(`[maimai-playerdata] 解析結果: name="${playerData.name}" rating="${playerData.rating}" classRank="${playerData.classRank}" playCount="${playerData.playCount}" stars="${playerData.stars}" friendCode="${playerData.friendCode}" title="${playerData.title}"`);
 
             const embed = new EmbedBuilder()
                 .setColor(SERVER_COLORS[server])
@@ -134,8 +143,10 @@ module.exports = {
             }
 
             if (fields.length > 0) {
+                console.log(`[maimai-playerdata] 嵌入訊息包含 ${fields.length} 個欄位`);
                 embed.addFields(fields);
             } else {
+                console.warn(`[maimai-playerdata] 無法解析任何玩家資料欄位，可能是頁面版面已更新`);
                 embed.addFields({
                     name: '⚠️ 無法解析詳細資料',
                     value: '成功取得頁面，但無法解析玩家資訊，可能是網站版面有更新にゃ',
@@ -143,6 +154,7 @@ module.exports = {
                 });
             }
 
+            console.log(`[maimai-playerdata] 回覆已送出`);
             return interaction.editReply({ embeds: [embed] });
 
         } catch (error) {

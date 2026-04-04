@@ -281,8 +281,10 @@ module.exports = {
                 // parts: ['maimai', 'record', action, userId]
                 const action       = parts[2]; // prev | next | refresh
                 const targetUserId = parts[3];
+                console.log(`[maimai-record] 按鈕觸發: action=${action} targetUserId=${targetUserId} requestUserId=${interaction.user.id}`);
 
                 if (interaction.user.id !== targetUserId) {
+                    console.warn(`[maimai-record] 用戶 ${interaction.user.id} 嘗試操作他人記錄 (${targetUserId})，已拒絕`);
                     return interaction.reply({ content: '❌ 這不是你的記錄にゃ！', ephemeral: true });
                 }
 
@@ -290,43 +292,54 @@ module.exports = {
                 const cache = recordCommand.recordCache.get(targetUserId);
 
                 if (!cache) {
+                    console.warn(`[maimai-record] 找不到快取 userId=${targetUserId}，快取可能已過期`);
                     return interaction.reply({
                         content: '❌ 記錄快取已過期，請重新執行 `/maimai-record` にゃ',
                         ephemeral: true,
                     });
                 }
 
+                console.log(`[maimai-record] 快取命中 userId=${targetUserId}，目前 index=${cache.index} 共 ${cache.records.length} 筆`);
                 const userSessions = require('../utils/userSessions');
                 const server = userSessions.getServer(targetUserId);
 
                 if (action === 'refresh') {
+                    console.log(`[maimai-record] 開始 refresh，正在向伺服器重新請求遊玩記錄...`);
                     await interaction.deferUpdate();
                     try {
                         const session = userSessions.getSession(targetUserId);
                         const res = await session.authenticatedGet('record/');
+                        console.log(`[maimai-record] refresh HTTP 回應: statusCode=${res.statusCode} bodyLength=${res.body?.length ?? 0} 字元`);
                         if (res.statusCode !== 200) {
+                            console.warn(`[maimai-record] refresh 非預期狀態碼 ${res.statusCode}`);
                             return interaction.followUp({ content: '❌ 重新載入失敗にゃ', ephemeral: true });
                         }
                         const records = recordCommand.parseRecords(res.body);
+                        console.log(`[maimai-record] refresh 解析結果: ${records.length} 筆記錄`);
                         if (records.length === 0) {
+                            console.warn(`[maimai-record] refresh 解析後無有效記錄`);
                             return interaction.followUp({ content: '❌ 找不到遊玩記錄にゃ', ephemeral: true });
                         }
                         cache.records = records;
                         cache.index   = Math.min(cache.index, records.length - 1);
+                        console.log(`[maimai-record] refresh 完成，快取更新為 ${records.length} 筆，index 調整至 ${cache.index}`);
                     } catch (err) {
                         console.error('[maimai-record refresh]', err);
                         return interaction.followUp({ content: '❌ 重新載入時發生錯誤にゃ', ephemeral: true });
                     }
                 } else {
+                    const prevIndex = cache.index;
                     if (action === 'prev' && cache.index > 0) {
                         cache.index--;
                     } else if (action === 'next' && cache.index < cache.records.length - 1) {
                         cache.index++;
                     }
+                    console.log(`[maimai-record] 翻頁 action=${action}: ${prevIndex} -> ${cache.index}`);
                     await interaction.deferUpdate();
                 }
 
                 const { records, index } = cache;
+                console.log(`[maimai-record] 顯示記錄 index=${index} title="${records[index]?.title}"`);
                 const embed = recordCommand.buildRecordEmbed(records[index], index, records.length, server, interaction.user);
                 const row   = recordCommand.buildNavButtons(index, records.length, targetUserId);
 

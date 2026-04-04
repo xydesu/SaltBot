@@ -154,27 +154,37 @@ function parseRecordBlock(block) {
  * @returns {Array<object>}
  */
 function parseRecords(html) {
+    console.log(`[maimai-record] parseRecords 開始解析，HTML 長度: ${html.length} 字元`);
     const records = [];
 
     // Primary: split on "main_wrapper" divs, each wraps one record entry
     const blockRe = /<div[^>]+class="[^"]*main_wrapper[^"]*"[^>]*>([\s\S]*?)(?=<div[^>]+class="[^"]*main_wrapper|<\/body>|$)/gi;
     let match;
+    let blockCount = 0;
     while ((match = blockRe.exec(html)) !== null) {
         const block = match[1];
         if (!block.includes('music_name_block')) continue;
+        blockCount++;
+        console.log(`[maimai-record] 找到記錄區塊 #${blockCount}（長度: ${block.length} 字元）`);
         const record = parseRecordBlock(block);
+        console.log(`[maimai-record] 區塊 #${blockCount} 解析結果: title="${record.title}" diff="${record.difficulty}" achievement="${record.achievement}" rank="${record.rank}" fc="${record.fc}" type="${record.musicType}" date="${record.date}" dxScore="${record.dxScore}"`);
         if (record.title) records.push(record);
     }
 
     // Fallback: split on the music_kind_icon img tag which starts each entry
     if (records.length === 0) {
+        console.log('[maimai-record] 主要解析未找到記錄，使用 music_kind_icon 備援方法');
         const parts = html.split(/(?=<img[^>]+class="[^"]*music_kind_icon)/i);
-        for (const part of parts.slice(1)) {
+        console.log(`[maimai-record] 備援方法找到 ${parts.length - 1} 個區段`);
+        for (let i = 0; i < parts.slice(1).length; i++) {
+            const part = parts[i + 1];
             const record = parseRecordBlock(part);
+            console.log(`[maimai-record] 備援區段 #${i + 1} 解析結果: title="${record.title}" diff="${record.difficulty}" achievement="${record.achievement}" rank="${record.rank}"`);
             if (record.title) records.push(record);
         }
     }
 
+    console.log(`[maimai-record] parseRecords 完成，共解析 ${records.length} 筆有效記錄`);
     return records;
 }
 
@@ -269,8 +279,11 @@ module.exports = {
         await interaction.deferReply({ ephemeral: true });
 
         const userId = interaction.user.id;
+        const server = userSessions.getServer(userId);
+        console.log(`[maimai-record] 指令觸發 userId=${userId} server=${server}`);
 
         if (!userSessions.isLoggedIn(userId)) {
+            console.log(`[maimai-record] 用戶 ${userId} 尚未登入，拒絕執行`);
             const embed = new EmbedBuilder()
                 .setColor(0xFF6B6B)
                 .setTitle('❌ 尚未登入にゃ')
@@ -279,13 +292,16 @@ module.exports = {
             return interaction.editReply({ embeds: [embed] });
         }
 
-        const server = userSessions.getServer(userId);
+        console.log(`[maimai-record] 用戶 ${userId} 已登入，取得 Session`);
         const session = userSessions.getSession(userId);
 
         try {
+            console.log(`[maimai-record] 正在向伺服器請求遊玩記錄... (record/)`);
             const res = await session.authenticatedGet('record/');
+            console.log(`[maimai-record] HTTP 回應: statusCode=${res.statusCode} bodyLength=${res.body?.length ?? 0} 字元`);
 
             if (res.statusCode !== 200) {
+                console.warn(`[maimai-record] 非預期狀態碼 ${res.statusCode}，停止處理`);
                 const embed = new EmbedBuilder()
                     .setColor(0xFF6B6B)
                     .setTitle('❌ 無法取得遊玩記錄にゃ')
@@ -295,8 +311,10 @@ module.exports = {
             }
 
             const records = parseRecords(res.body);
+            console.log(`[maimai-record] 解析完成，共取得 ${records.length} 筆記錄`);
 
             if (records.length === 0) {
+                console.warn(`[maimai-record] 頁面解析結果為空，可能是版面更新或帳號無遊玩記錄`);
                 const embed = new EmbedBuilder()
                     .setColor(0xF39C12)
                     .setTitle('⚠️ 找不到遊玩記錄にゃ')
@@ -306,9 +324,11 @@ module.exports = {
             }
 
             recordCache.set(userId, { records, index: 0 });
+            console.log(`[maimai-record] 快取已寫入 userId=${userId}，共 ${records.length} 筆，顯示第 1 筆: title="${records[0].title}"`);
 
             const embed = buildRecordEmbed(records[0], 0, records.length, server, interaction.user);
             const row   = buildNavButtons(0, records.length, userId);
+            console.log(`[maimai-record] 回覆已送出`);
 
             return interaction.editReply({ embeds: [embed], components: [row] });
 
