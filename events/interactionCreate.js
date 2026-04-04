@@ -225,6 +225,65 @@ module.exports = {
                 return;
             }
             
+            // 遊玩記錄導航按鈕處理
+            if (interaction.customId.startsWith('maimai_record_')) {
+                // customId format: maimai_record_{action}_{userId}
+                const parts = interaction.customId.split('_');
+                // parts: ['maimai', 'record', action, userId]
+                const action       = parts[2]; // prev | next | refresh
+                const targetUserId = parts[3];
+
+                if (interaction.user.id !== targetUserId) {
+                    return interaction.reply({ content: '❌ 這不是你的記錄にゃ！', ephemeral: true });
+                }
+
+                const recordCommand = require('../commands/maimai/maimai-record.js');
+                const cache = recordCommand.recordCache.get(targetUserId);
+
+                if (!cache) {
+                    return interaction.reply({
+                        content: '❌ 記錄快取已過期，請重新執行 `/maimai-record` にゃ',
+                        ephemeral: true,
+                    });
+                }
+
+                const userSessions = require('../utils/userSessions');
+                const server = userSessions.getServer(targetUserId);
+
+                if (action === 'refresh') {
+                    await interaction.deferUpdate();
+                    try {
+                        const session = userSessions.getSession(targetUserId);
+                        const res = await session.authenticatedGet('record/');
+                        if (res.statusCode !== 200) {
+                            return interaction.followUp({ content: '❌ 重新載入失敗にゃ', ephemeral: true });
+                        }
+                        const records = recordCommand.parseRecords(res.body);
+                        if (records.length === 0) {
+                            return interaction.followUp({ content: '❌ 找不到遊玩記錄にゃ', ephemeral: true });
+                        }
+                        cache.records = records;
+                        cache.index   = Math.min(cache.index, records.length - 1);
+                    } catch (err) {
+                        console.error('[maimai-record refresh]', err);
+                        return interaction.followUp({ content: '❌ 重新載入時發生錯誤にゃ', ephemeral: true });
+                    }
+                } else {
+                    if (action === 'prev' && cache.index > 0) {
+                        cache.index--;
+                    } else if (action === 'next' && cache.index < cache.records.length - 1) {
+                        cache.index++;
+                    }
+                    await interaction.deferUpdate();
+                }
+
+                const { records, index } = cache;
+                const embed = recordCommand.buildRecordEmbed(records[index], index, records.length, server, interaction.user);
+                const row   = recordCommand.buildNavButtons(index, records.length, targetUserId);
+
+                return interaction.editReply({ embeds: [embed], components: [row] });
+            }
+
             console.log(`按鈕被點擊: ${interaction.customId}`);
         }
         
