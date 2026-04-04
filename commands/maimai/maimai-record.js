@@ -106,6 +106,19 @@ function parseMusicType(src) {
 }
 
 /**
+ * Strip all HTML tags from a string, looping until no tags remain so that
+ * constructs like <<script>script> are fully removed.
+ * @param {string} html
+ * @returns {string}
+ */
+function stripHtml(html) {
+    let s = html;
+    let prev;
+    do { prev = s; s = s.replace(/<[^>]+>/g, ''); } while (s !== prev);
+    return s.trim();
+}
+
+/**
  * Extract the achievement percentage from a record block's HTML.
  * The site renders it as separate spans: integer, ".", decimal, "%".
  */
@@ -117,7 +130,7 @@ function extractAchievement(block) {
     // Reconstruct from the achievement text div
     const achvBlockMatch = block.match(/class="[^"]*playlog_achievement_txt[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
     if (achvBlockMatch) {
-        const stripped = achvBlockMatch[1].replace(/<[^>]+>/g, '').trim().replace(/\s+/g, '');
+        const stripped = stripHtml(achvBlockMatch[1]).replace(/\s+/g, '');
         const pctMatch = stripped.match(/^(\d{1,3}\.?\d*)%?$/);
         if (pctMatch) return `${pctMatch[1]}%`;
     }
@@ -135,8 +148,15 @@ function parseRecordBlock(block) {
     // Song title — try several class-name variants used across server versions
     const titleMatch = block.match(/class="[^"]*music_name_block[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
         || block.match(/class="[^"]*music_name[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
-        || block.match(/class="[^"]*music_title[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
-    if (titleMatch) record.title = titleMatch[1].replace(/<[^>]+>/g, '').trim();
+        || block.match(/class="[^"]*music_title[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
+        || block.match(/class="[^"]*basic_block[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+    if (titleMatch) {
+        const raw = stripHtml(titleMatch[1]);
+        // Reject values that look like percentages, dates, scores, or single digits
+        if (raw && !/^[\d,]+$/.test(raw) && !/%/.test(raw) && !/^\d{4}[\/\-]/.test(raw)) {
+            record.title = raw;
+        }
+    }
 
     // Difficulty
     const diffMatch = block.match(/<img[^>]+class="[^"]*playlog_diff[^"]*"[^>]+src="([^"]+)"/i)
@@ -198,44 +218,68 @@ function parseRecords(html) {
     let blockCount = 0;
     while ((match = blockRe.exec(html)) !== null) {
         const block = match[1];
-        if (!block.includes('music_name_block') && !block.includes('music_name') && !block.includes('playlog_diff')) continue;
+        if (!block.includes('music_name_block') && !block.includes('music_name') && !block.includes('basic_block') && !block.includes('playlog_diff')) continue;
         blockCount++;
         console.log(`[maimai-record] 找到記錄區塊 #${blockCount}（長度: ${block.length} 字元）`);
         const record = parseRecordBlock(block);
         console.log(`[maimai-record] 區塊 #${blockCount} 解析結果: title="${record.title}" diff="${record.difficulty}" achievement="${record.achievement}" rank="${record.rank}" fc="${record.fc}" type="${record.musicType}" date="${record.date}" dxScore="${record.dxScore}"`);
-        if (record.title) records.push(record);
+        // A very large block likely contains multiple records in a single wrapper;
+        // treat it as a container (don't count it) so the fallbacks can sub-split it.
+        if (record.title && block.length < 10000) records.push(record);
     }
 
-    // Fallback A: split on music_name_block — works when the title div precedes music_kind_icon
+    // Fallback A: split on known title-class divs — works when the title div precedes music_kind_icon
     if (records.length === 0) {
         console.log('[maimai-record] 主要解析未找到記錄，嘗試 music_name_block 備援方法');
-        const parts = html.split(/(?=<div[^>]+class="[^"]*music_name_block)/i);
+        const parts = html.split(/(?=<div[^>]+class="[^"]*(?:music_name_block|basic_block)[^"]*")/i);
         console.log(`[maimai-record] music_name_block 備援方法找到 ${parts.length - 1} 個區段`);
         if (parts.length > 1) {
             console.log(`[maimai-record] 備援 A 區段 #1 前800字元:\n${parts[1].substring(0, 800)}`);
         }
         for (let i = 0; i < parts.slice(1).length; i++) {
             const part = parts[i + 1];
-            if (!part.includes('playlog_diff') && !part.includes('playlog_achievement')) continue;
+            if (!part.includes('playlog_diff') && !part.includes('playlog_achievement') && !/\d{2,3}\.\d{4}%/.test(part) && !part.includes('diff_') && !part.includes('scorerankicon')) continue;
             const record = parseRecordBlock(part);
             console.log(`[maimai-record] 備援 A 區段 #${i + 1} 解析結果: title="${record.title}" diff="${record.difficulty}" achievement="${record.achievement}" rank="${record.rank}"`);
-            if (record.title) records.push(record);
+            if (record.title || record.achievement || record.rank) records.push(record);
         }
     }
 
-    // Fallback B: split on music_kind_icon — works when the type icon precedes the title
+    // Fallback B: split on music_kind_icon
+    // On the INT server the kind-icon img comes BEFORE the rest of the record data,
+    // so each segment may not contain the song title (which lives at the end of the
+    // PREVIOUS segment).  We therefore also look back when the title is missing.
     if (records.length === 0) {
         console.log('[maimai-record] 備援 A 無效，使用 music_kind_icon 備援方法');
         const parts = html.split(/(?=<img[^>]+class="[^"]*music_kind_icon)/i);
         console.log(`[maimai-record] music_kind_icon 備援方法找到 ${parts.length - 1} 個區段`);
         if (parts.length > 1) {
-            console.log(`[maimai-record] 備援 B 區段 #1 前800字元:\n${parts[1].substring(0, 800)}`);
+            console.log(`[maimai-record] 備援 B 區段 #1 前2000字元:\n${parts[1].substring(0, 2000)}`);
+            console.log(`[maimai-record] 備援 B parts[0] 末500字元:\n${parts[0].slice(-500)}`);
         }
         for (let i = 0; i < parts.slice(1).length; i++) {
             const part = parts[i + 1];
             const record = parseRecordBlock(part);
+
+            // When the title is before the kind-icon (INT server layout), it sits at
+            // the tail of the previous segment — scan it with the same title regexes.
+            if (!record.title && i >= 0) {
+                const prevPart = parts[i];
+                const titleRe = /class="[^"]*(?:music_name_block|music_name|music_title|basic_block)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
+                let lastTitleMatch = null;
+                let m;
+                while ((m = titleRe.exec(prevPart)) !== null) { lastTitleMatch = m; }
+                if (lastTitleMatch) {
+                    const raw = stripHtml(lastTitleMatch[1]);
+                    if (raw && !/^[\d,]+$/.test(raw) && !/%/.test(raw) && !/^\d{4}[\/\-]/.test(raw)) {
+                        record.title = raw;
+                    }
+                }
+            }
+
             console.log(`[maimai-record] 備援 B 區段 #${i + 1} 解析結果: title="${record.title}" diff="${record.difficulty}" achievement="${record.achievement}" rank="${record.rank}"`);
-            if (record.title) records.push(record);
+            // Push records that have any substantive data even when the title is unknown
+            if (record.title || record.achievement || record.rank) records.push(record);
         }
     }
 
