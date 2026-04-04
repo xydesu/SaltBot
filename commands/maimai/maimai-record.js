@@ -419,6 +419,7 @@ module.exports = {
             }
 
             const records = parseRecords(res.body);
+            console.log(`[maimai-record] 回應 body 前 500 字元: ${res.body?.substring(0, 500).replace(/\n/g, ' ')}`);
             console.log(`[maimai-record] 解析完成，共取得 ${records.length} 筆記錄`);
 
             if (records.length === 0) {
