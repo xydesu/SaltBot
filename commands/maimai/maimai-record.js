@@ -14,19 +14,19 @@ const recordCache = new Map();
 
 const SERVER_LABELS = {
     INT: '🌏 國際版 (International)',
-    JP:  '🇯🇵 日本版 (Japan)',
+    JP: '🇯🇵 日本版 (Japan)',
 };
 
 const SERVER_COLORS = {
     INT: 0x3498DB,
-    JP:  0xE60012,
+    JP: 0xE60012,
 };
 
 const DIFF_INFO = {
-    basic:    { name: 'BASIC',     emoji: '🟢' },
-    advanced: { name: 'ADVANCED',  emoji: '🟡' },
-    expert:   { name: 'EXPERT',    emoji: '🔴' },
-    master:   { name: 'MASTER',    emoji: '🟣' },
+    basic: { name: 'BASIC', emoji: '🟢' },
+    advanced: { name: 'ADVANCED', emoji: '🟡' },
+    expert: { name: 'EXPERT', emoji: '🔴' },
+    master: { name: 'MASTER', emoji: '🟣' },
     remaster: { name: 'Re:MASTER', emoji: '⚪' },
 };
 
@@ -36,10 +36,10 @@ function parseDifficulty(src) {
     if (!src) return null;
     const s = src.toLowerCase();
     if (s.includes('remaster') || s.includes('re_master')) return 'remaster';
-    if (s.includes('master'))   return 'master';
-    if (s.includes('expert'))   return 'expert';
+    if (s.includes('master')) return 'master';
+    if (s.includes('expert')) return 'expert';
     if (s.includes('advanced')) return 'advanced';
-    if (s.includes('basic'))    return 'basic';
+    if (s.includes('basic')) return 'basic';
     return null;
 }
 
@@ -52,41 +52,41 @@ function parseRank(src) {
     const iconMatch = s.match(/scorerankicon_([a-z_]+?)(?:\.png|\.gif|\.jpg|$)/);
     if (iconMatch) {
         const name = iconMatch[1];
-        if (name === 'sssplus'  || name === 'sss_plus')  return 'SSS+';
-        if (name === 'sss')                              return 'SSS';
-        if (name === 'ssplus'   || name === 'ss_plus')   return 'SS+';
-        if (name === 'ss')                               return 'SS';
-        if (name === 'splus'    || name === 's_plus')    return 'S+';
-        if (name === 's')                                return 'S';
-        if (name === 'aaa')                              return 'AAA';
-        if (name === 'aaplus'   || name === 'aa_plus')   return 'AA+';
-        if (name === 'aa')                               return 'AA';
-        if (name === 'aplus'    || name === 'a_plus')    return 'A+';
-        if (name === 'a')                                return 'A';
-        if (name === 'bbb')                              return 'BBB';
-        if (name === 'bb')                               return 'BB';
-        if (name === 'b')                                return 'B';
-        if (name === 'c')                                return 'C';
-        if (name === 'd')                                return 'D';
+        if (name === 'sssplus' || name === 'sss_plus') return 'SSS+';
+        if (name === 'sss') return 'SSS';
+        if (name === 'ssplus' || name === 'ss_plus') return 'SS+';
+        if (name === 'ss') return 'SS';
+        if (name === 'splus' || name === 's_plus') return 'S+';
+        if (name === 's') return 'S';
+        if (name === 'aaa') return 'AAA';
+        if (name === 'aaplus' || name === 'aa_plus') return 'AA+';
+        if (name === 'aa') return 'AA';
+        if (name === 'aplus' || name === 'a_plus') return 'A+';
+        if (name === 'a') return 'A';
+        if (name === 'bbb') return 'BBB';
+        if (name === 'bb') return 'BB';
+        if (name === 'b') return 'B';
+        if (name === 'c') return 'C';
+        if (name === 'd') return 'D';
     }
 
     // Fallback: substring checks on the full src string
     if (s.includes('sss_plus') || s.includes('sssplus')) return 'SSS+';
-    if (s.includes('sss'))                               return 'SSS';
-    if (s.includes('ss_plus')  || s.includes('ssplus'))  return 'SS+';
-    if (s.includes('ss'))                                return 'SS';
-    if (s.includes('s_plus')   || s.includes('splus'))   return 'S+';
-    if (s.includes('/s.'))                               return 'S';
-    if (s.includes('aaa'))                               return 'AAA';
-    if (s.includes('aa_plus')  || s.includes('aaplus'))  return 'AA+';
-    if (s.includes('/aa.'))                              return 'AA';
-    if (s.includes('a_plus')   || s.includes('aplus'))   return 'A+';
-    if (s.includes('/a.'))                               return 'A';
-    if (s.includes('bbb'))                               return 'BBB';
-    if (s.includes('/bb.'))                              return 'BB';
-    if (s.includes('/b.'))                               return 'B';
-    if (s.includes('/c.'))                               return 'C';
-    if (s.includes('/d.'))                               return 'D';
+    if (s.includes('sss')) return 'SSS';
+    if (s.includes('ss_plus') || s.includes('ssplus')) return 'SS+';
+    if (s.includes('ss')) return 'SS';
+    if (s.includes('s_plus') || s.includes('splus')) return 'S+';
+    if (s.includes('/s.')) return 'S';
+    if (s.includes('aaa')) return 'AAA';
+    if (s.includes('aa_plus') || s.includes('aaplus')) return 'AA+';
+    if (s.includes('/aa.')) return 'AA';
+    if (s.includes('a_plus') || s.includes('aplus')) return 'A+';
+    if (s.includes('/a.')) return 'A';
+    if (s.includes('bbb')) return 'BBB';
+    if (s.includes('/bb.')) return 'BB';
+    if (s.includes('/b.')) return 'B';
+    if (s.includes('/c.')) return 'C';
+    if (s.includes('/d.')) return 'D';
     return null;
 }
 
@@ -94,9 +94,9 @@ function parseFCStatus(src) {
     if (!src) return null;
     const s = src.toLowerCase();
     if (s.includes('applus') || s.includes('ap_plus') || s.includes('allperfectplus')) return 'AP+';
-    if (s.includes('/ap.'))                                                              return 'AP';
-    if (s.includes('fcplus') || s.includes('fc_plus') || s.includes('fullcomboplus'))  return 'FC+';
-    if (s.includes('/fc.'))                                                              return 'FC';
+    if (s.includes('/ap.')) return 'AP';
+    if (s.includes('fcplus') || s.includes('fc_plus') || s.includes('fullcomboplus')) return 'FC+';
+    if (s.includes('/fc.')) return 'FC';
     return null;
 }
 
@@ -145,70 +145,74 @@ function extractAchievement(block) {
 function parseRecordBlock(block) {
     const record = {};
 
-    // Song title — try several class-name variants used across server versions.
-    // Intentionally excludes basic_block: that class is also used for score/data
-    // containers on the INT server, causing DX-score values to be misread as titles.
-    const titleMatch = block.match(/class="[^"]*music_name_block[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
-        || block.match(/class="[^"]*music_name[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
-        || block.match(/class="[^"]*music_title[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
-    if (titleMatch) {
-        const raw = stripHtml(titleMatch[1]);
-        // Reject values that look like percentages, dates, plain numbers, or
-        // DX-score fractions (e.g. "2,021 / 2,454").
-        if (raw
-            && !/^[\d,]+$/.test(raw)
-            && !/%/.test(raw)
-            && !/^\d{4}[\/\-]/.test(raw)
-            && !/^\d[\d,\s]*\/[\d,\s]*\d$/.test(raw) // reject DX-score fractions (e.g. "2,021 / 2,454")
-        ) {
-            record.title = raw;
-        }
+    // 1. 曲名 (Song Title)
+    // 擷取 basic_block，直到下一個主要區塊 div (p_r) 開始，避免被截斷
+    const basicMatch = block.match(/class="[^"]*basic_block[^"]*"[^>]*>([\s\S]*?)<div[^>]+class="[^"]*p_r/i);
+    if (basicMatch) {
+        let text = basicMatch[1];
+        // 先移除等級數字的 div (例如包含 14+ 的區塊)，避免與曲名混淆
+        text = text.replace(/<div[^>]*class="[^"]*music_lv_back[^"]*"[^>]*>.*?<\/div>/gi, '');
+        // 移除剩餘 HTML 標籤
+        text = stripHtml(text);
+        if (text) record.title = text;
+    }
+    
+    // 備用曲名提取
+    if (!record.title) {
+        const tm = block.match(/class="[^"]*music_(?:name|title)_block[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+        if (tm) record.title = stripHtml(tm[1]);
     }
 
-    // Difficulty
-    const diffMatch = block.match(/<img[^>]+class="[^"]*playlog_diff[^"]*"[^>]+src="([^"]+)"/i)
-        || block.match(/<img[^>]+src="([^"]*diff_[^"]*)"[^>]*/i);
-    if (diffMatch) record.difficulty = parseDifficulty(diffMatch[1]);
+    // 2. 難度 (Difficulty)
+    const diffMatch = block.match(/playlog_(remaster|master|expert|advanced|basic)_container/i)
+        || block.match(/diff_([a-z]+)\.png/i);
+    if (diffMatch) record.difficulty = diffMatch[1].toLowerCase();
 
-    // Achievement rate
-    record.achievement = extractAchievement(block);
+    // 3. 達成率 (Achievement)
+    const achMatch = block.match(/playlog_achievement_txt[^>]*>(\d+)<span[^>]*>\.(\d+)%<\/span>/i) 
+        || block.match(/(\d{1,3}\.\d{4})%/);
+    if (achMatch) {
+        record.achievement = achMatch[2] ? `${achMatch[1]}.${achMatch[2]}%` : `${achMatch[1]}%`;
+    }
 
-    // Rank badge — handle both attribute orderings and the ui_scorerankicon_ path convention
-    const rankMatch =
-        // class before src
-        block.match(/<img[^>]+class="[^"]*playlog_scorerank[^"]*"[^>]+src="([^"]+)"/i)
-        // src before class
-        || block.match(/<img[^>]+src="([^"]+)"[^>]+class="[^"]*playlog_scorerank[^"]*"/i)
-        // src contains "scorerank" (covers scorerank_xxx.png variants)
-        || block.match(/<img[^>]+src="([^"]*scorerank[^"]*)"[^>]*/i)
-        // src contains "scorerankicon" (covers ui_scorerankicon_xxx.png)
-        || block.match(/<img[^>]+src="([^"]*scorerankicon[^"]*)"[^>]*/i)
-        // generic /playlog/ image that matches any rank token in its filename
-        || block.match(/<img[^>]+src="([^"]*\/playlog\/[^"]*(?:sss|ss|aaa|aa|bbb|bb)[^"]*\.png)"[^>]*/i);
-    if (rankMatch) record.rank = parseRank(rankMatch[1]);
+    // 4. 等級評價 (Rank)
+    // 加入對 plus 字尾檔名的支援 (例如 sssplus.png)
+    const rankMatch = block.match(/img\/playlog\/(sssplus|sss|ssplus|ss|splus|s|aaa|aa|a|bbb|bb|b|c|d)\.png/i)
+        || block.match(/scorerank_([a-z0-9_]+)\.png/i);
+    if (rankMatch) {
+        let r = rankMatch[1].toUpperCase();
+        r = r.replace(/PLUS/g, '+').replace(/_PLUS/g, '+');
+        record.rank = r;
+    }
 
-    // FC / AP status
-    const fcMatch = block.match(/<img[^>]+class="[^"]*playlog_fc[^"]*"[^>]+src="([^"]+)"/i)
-        || block.match(/<img[^>]+src="([^"]*\/fc[^"]*\.png)"[^>]*/i);
-    if (fcMatch) record.fc = parseFCStatus(fcMatch[1]);
+    // 5. FC / Sync 狀態
+    const fcMatch = block.match(/img\/playlog\/(fcplus|fc|applus|ap|fcp|app)(?:_dummy)?\.png/i);
+    if (fcMatch && !fcMatch[0].includes('dummy')) {
+        let f = fcMatch[1].toUpperCase();
+        f = f.replace(/PLUS/g, '+');
+        if (f === 'FCP') f = 'FC+'; // 防呆
+        if (f === 'APP') f = 'AP+'; // 防呆
+        record.fc = f;
+    } else {
+        record.fc = null;
+    }
 
-    // Music type (DX / Standard)
-    const kindMatch = block.match(/<img[^>]+class="[^"]*music_kind_icon[^"]*"[^>]+src="([^"]+)"/i)
-        || block.match(/<img[^>]+src="([^"]*music_(?:dx|standard)[^"]*)"[^>]*/i);
-    if (kindMatch) record.musicType = parseMusicType(kindMatch[1]);
+    // 6. 譜面類型 (DX / Standard)
+    const typeMatch = block.match(/music_(dx|standard)\.png/i);
+    if (typeMatch) record.musicType = (typeMatch[1] === 'dx') ? 'DX' : 'STD';
 
-    // Play date
-    const dateMatch = block.match(/class="[^"]*sub_title[^"]*"[^>]*>\s*([\d\/\-: ]+)\s*<\/div>/i)
-        || block.match(/(\d{4}[\/\-]\d{2}[\/\-]\d{2}\s+\d{2}:\d{2})/);
-    if (dateMatch) record.date = dateMatch[1].trim();
+    // 7. 遊玩日期
+    const dateMatch = block.match(/(\d{4}\/\d{2}\/\d{2}\s\d{2}:\d{2})/);
+    if (dateMatch) record.date = dateMatch[1];
 
-    // DX Score
-    const dxScoreMatch = block.match(/class="[^"]*playlog_score_block[^"]*"[^>]*>\s*([\d,]+)\s*<\/div>/i)
-        || block.match(/class="[^"]*score_block[^"]*"[^>]*>[\s\S]*?([\d,]+)\s*<\/div>/i);
-    if (dxScoreMatch) record.dxScore = dxScoreMatch[1].replace(/,/g, '');
+    // 8. DX Score
+    const dxMatch = block.match(/white p_r_5 f_15 f_r">([\d,]+)\s*\/\s*[\d,]+/i);
+    if (dxMatch) record.dxScore = dxMatch[1].replace(/,/g, '');
 
     return record;
 }
+
+
 
 /**
  * Parse all record cards from the record page HTML.
@@ -238,84 +242,29 @@ function hasRecordIndicators(html) {
         || html.includes('scorerankicon');
 }
 
+/**
+ * Parse all record cards from the record page HTML.
+ * @param {string} html
+ * @returns {Array<object>}
+ */
 function parseRecords(html) {
     console.log(`[maimai-record] parseRecords 開始解析，HTML 長度: ${html.length} 字元`);
     const records = [];
 
-    // Primary: split on common record-entry wrapper divs (main_wrapper, w_450, p_r)
-    const blockRe = /<div[^>]+class="[^"]*(?:main_wrapper|w_450)[^"]*"[^>]*>([\s\S]*?)(?=<div[^>]+class="[^"]*(?:main_wrapper|w_450)[^"]*"|<\/body>|$)/gi;
-    let match;
-    let blockCount = 0;
-    while ((match = blockRe.exec(html)) !== null) {
-        const block = match[1];
-        if (!block.includes('music_name_block') && !block.includes('music_name') && !block.includes('basic_block') && !block.includes('playlog_diff')) continue;
-        blockCount++;
-        console.log(`[maimai-record] 找到記錄區塊 #${blockCount}（長度: ${block.length} 字元）`);
-        const record = parseRecordBlock(block);
-        console.log(`[maimai-record] 區塊 #${blockCount} 解析結果: title="${record.title}" diff="${record.difficulty}" achievement="${record.achievement}" rank="${record.rank}" fc="${record.fc}" type="${record.musicType}" date="${record.date}" dxScore="${record.dxScore}"`);
-        // A very large block likely contains multiple records in a single wrapper;
-        // treat it as a container (don't count it) so the fallbacks can sub-split it.
-        if (record.title && block.length < MAX_SINGLE_RECORD_BLOCK_SIZE) records.push(record);
-    }
+    // 直接使用每筆紀錄獨立的共用外層容器來切割，保證每一塊都是完整的單筆紀錄
+    const parts = html.split(/(?=<div[^>]+class="[^"]*p_10 t_l f_0 v_b[^"]*"[^>]*>)/i);
+    
+    for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        
+        // 確保這是一個實際的遊玩紀錄區塊（排除掉 footer 或其他無關區域）
+        if (!part.includes('playlog_top_container')) continue;
 
-    // Fallback A: split on known title-class divs — works when the title div precedes music_kind_icon.
-    // We split only on music_name_block (not basic_block) because basic_block is also used for
-    // score/data containers on the INT server, which would fragment each record into multiple
-    // segments and prevent titles from being paired with their achievement data.
-    if (records.length === 0) {
-        console.log('[maimai-record] 主要解析未找到記錄，嘗試 music_name_block 備援方法');
-        const parts = html.split(/(?=<div[^>]+class="[^"]*music_name_block[^"]*")/i);
-        console.log(`[maimai-record] music_name_block 備援方法找到 ${parts.length - 1} 個區段`);
-        if (parts.length > 1) {
-            console.log(`[maimai-record] 備援 A 區段 #1 前800字元:\n${parts[1].substring(0, 800)}`);
-        }
-        for (let i = 0; i < parts.slice(1).length; i++) {
-            const part = parts[i + 1];
-            if (!hasRecordIndicators(part)) continue;
-            const record = parseRecordBlock(part);
-            console.log(`[maimai-record] 備援 A 區段 #${i + 1} 解析結果: title="${record.title}" diff="${record.difficulty}" achievement="${record.achievement}" rank="${record.rank}"`);
-            // Only push records that have a valid title so that segments which contain
-            // achievement data but no title (INT server layout) don't fill the cache and
-            // prevent fallback B from running.
-            if (record.title) records.push(record);
-        }
-    }
-
-    // Fallback B: split on music_kind_icon
-    // On the INT server the kind-icon img comes BEFORE the rest of the record data,
-    // so each segment may not contain the song title (which lives at the end of the
-    // PREVIOUS segment).  We therefore also look back when the title is missing.
-    if (records.length === 0) {
-        console.log('[maimai-record] 備援 A 無效，使用 music_kind_icon 備援方法');
-        const parts = html.split(/(?=<img[^>]+class="[^"]*music_kind_icon)/i);
-        console.log(`[maimai-record] music_kind_icon 備援方法找到 ${parts.length - 1} 個區段`);
-        if (parts.length > 1) {
-            console.log(`[maimai-record] 備援 B 區段 #1 前2000字元:\n${parts[1].substring(0, 2000)}`);
-            console.log(`[maimai-record] 備援 B parts[0] 末500字元:\n${parts[0].slice(-500)}`);
-        }
-        for (let i = 0; i < parts.slice(1).length; i++) {
-            const part = parts[i + 1];
-            const record = parseRecordBlock(part);
-
-            // When the title is before the kind-icon (INT server layout), it sits at
-            // the tail of the previous segment — scan it with the same title regexes.
-            if (!record.title && i >= 0) {
-                const prevPart = parts[i];
-                const titleRe = /class="[^"]*(?:music_name_block|music_name|music_title|basic_block)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
-                let lastTitleMatch = null;
-                let m;
-                while ((m = titleRe.exec(prevPart)) !== null) { lastTitleMatch = m; }
-                if (lastTitleMatch) {
-                    const raw = stripHtml(lastTitleMatch[1]);
-                    if (raw && !/^[\d,]+$/.test(raw) && !/%/.test(raw) && !/^\d{4}[\/\-]/.test(raw)) {
-                        record.title = raw;
-                    }
-                }
-            }
-
-            console.log(`[maimai-record] 備援 B 區段 #${i + 1} 解析結果: title="${record.title}" diff="${record.difficulty}" achievement="${record.achievement}" rank="${record.rank}"`);
-            // Push records that have any substantive data even when the title is unknown
-            if (record.title || record.achievement || record.rank) records.push(record);
+        const record = parseRecordBlock(part);
+        
+        // 只要有解析出標題或達成率，就將其視為有效紀錄推入陣列
+        if (record.title || record.achievement) {
+            records.push(record);
         }
     }
 
@@ -462,7 +411,7 @@ module.exports = {
             console.log(`[maimai-record] 快取已寫入 userId=${userId}，共 ${records.length} 筆，顯示第 1 筆: title="${records[0].title}"`);
 
             const embed = buildRecordEmbed(records[0], 0, records.length, server, interaction.user);
-            const row   = buildNavButtons(0, records.length, userId);
+            const row = buildNavButtons(0, records.length, userId);
             console.log(`[maimai-record] 回覆已送出`);
 
             return interaction.editReply({ embeds: [embed], components: [row] });
