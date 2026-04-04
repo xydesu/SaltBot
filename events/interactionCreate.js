@@ -225,6 +225,127 @@ module.exports = {
                 return;
             }
             
+            // 帳號密碼儲存按鈕處理
+            if (interaction.customId.startsWith('maimai_creds_save_')) {
+                const targetUserId = interaction.customId.replace('maimai_creds_save_', '');
+                if (interaction.user.id !== targetUserId) {
+                    return interaction.reply({ content: '❌ 這不是你的按鈕にゃ！', ephemeral: true });
+                }
+                const userSessions = require('../utils/userSessions');
+                const { segaId, password } = userSessions.getSession(targetUserId, 'INT').getCredentials();
+                if (!segaId || !password) {
+                    return interaction.reply({ content: '❌ 找不到帳號資料，請重新執行 `/maimai-login` にゃ', ephemeral: true });
+                }
+                const db = require('../utils/database');
+                db.saveCredentials(targetUserId, segaId, password);
+                await interaction.update({
+                    content: '✅ 帳號密碼已安全儲存にゃ！下次使用 `/maimai-login` 時將會自動登入にゃ～',
+                    embeds: [],
+                    components: [],
+                });
+                return;
+            }
+
+            if (interaction.customId.startsWith('maimai_creds_nosave_')) {
+                const targetUserId = interaction.customId.replace('maimai_creds_nosave_', '');
+                if (interaction.user.id !== targetUserId) {
+                    return interaction.reply({ content: '❌ 這不是你的按鈕にゃ！', ephemeral: true });
+                }
+                await interaction.update({
+                    content: '✅ 了解にゃ！帳號密碼不會被儲存にゃ～',
+                    embeds: [],
+                    components: [],
+                });
+                return;
+            }
+
+            if (interaction.customId.startsWith('maimai_creds_delete_')) {
+                const targetUserId = interaction.customId.replace('maimai_creds_delete_', '');
+                if (interaction.user.id !== targetUserId) {
+                    return interaction.reply({ content: '❌ 這不是你的按鈕にゃ！', ephemeral: true });
+                }
+                const userSessions = require('../utils/userSessions');
+                userSessions.deleteAutoLogin(targetUserId);
+                await interaction.update({
+                    content: '🗑️ 已儲存的帳號密碼已刪除にゃ！',
+                    embeds: [],
+                    components: [],
+                });
+                return;
+            }
+
+            // 遊玩記錄導航按鈕處理
+            if (interaction.customId.startsWith('maimai_record_')) {
+                // customId format: maimai_record_{action}_{userId}
+                const parts = interaction.customId.split('_');
+                // parts: ['maimai', 'record', action, userId]
+                const action       = parts[2]; // prev | next | refresh
+                const targetUserId = parts[3];
+                console.log(`[maimai-record] 按鈕觸發: action=${action} targetUserId=${targetUserId} requestUserId=${interaction.user.id}`);
+
+                if (interaction.user.id !== targetUserId) {
+                    console.warn(`[maimai-record] 用戶 ${interaction.user.id} 嘗試操作他人記錄 (${targetUserId})，已拒絕`);
+                    return interaction.reply({ content: '❌ 這不是你的記錄にゃ！', ephemeral: true });
+                }
+
+                const recordCommand = require('../commands/maimai/maimai-record.js');
+                const cache = recordCommand.recordCache.get(targetUserId);
+
+                if (!cache) {
+                    console.warn(`[maimai-record] 找不到快取 userId=${targetUserId}，快取可能已過期`);
+                    return interaction.reply({
+                        content: '❌ 記錄快取已過期，請重新執行 `/maimai-record` にゃ',
+                        ephemeral: true,
+                    });
+                }
+
+                console.log(`[maimai-record] 快取命中 userId=${targetUserId}，目前 index=${cache.index} 共 ${cache.records.length} 筆`);
+                const userSessions = require('../utils/userSessions');
+                const server = userSessions.getServer(targetUserId);
+
+                if (action === 'refresh') {
+                    console.log(`[maimai-record] 開始 refresh，正在向伺服器重新請求遊玩記錄...`);
+                    await interaction.deferUpdate();
+                    try {
+                        const session = userSessions.getSession(targetUserId);
+                        const res = await session.authenticatedGet('record/');
+                        console.log(`[maimai-record] refresh HTTP 回應: statusCode=${res.statusCode} bodyLength=${res.body?.length ?? 0} 字元`);
+                        if (res.statusCode !== 200) {
+                            console.warn(`[maimai-record] refresh 非預期狀態碼 ${res.statusCode}`);
+                            return interaction.followUp({ content: '❌ 重新載入失敗にゃ', ephemeral: true });
+                        }
+                        const records = recordCommand.parseRecords(res.body);
+                        console.log(`[maimai-record] refresh 解析結果: ${records.length} 筆記錄`);
+                        if (records.length === 0) {
+                            console.warn(`[maimai-record] refresh 解析後無有效記錄`);
+                            return interaction.followUp({ content: '❌ 找不到遊玩記錄にゃ', ephemeral: true });
+                        }
+                        cache.records = records;
+                        cache.index   = Math.min(cache.index, records.length - 1);
+                        console.log(`[maimai-record] refresh 完成，快取更新為 ${records.length} 筆，index 調整至 ${cache.index}`);
+                    } catch (err) {
+                        console.error('[maimai-record refresh]', err);
+                        return interaction.followUp({ content: '❌ 重新載入時發生錯誤にゃ', ephemeral: true });
+                    }
+                } else {
+                    const prevIndex = cache.index;
+                    if (action === 'prev' && cache.index > 0) {
+                        cache.index--;
+                    } else if (action === 'next' && cache.index < cache.records.length - 1) {
+                        cache.index++;
+                    }
+                    console.log(`[maimai-record] 翻頁 action=${action}: ${prevIndex} -> ${cache.index}`);
+                    await interaction.deferUpdate();
+                }
+
+                const { records, index } = cache;
+                console.log(`[maimai-record] 顯示記錄 index=${index} title="${records[index]?.title}"`);
+                const embed = recordCommand.buildRecordEmbed(records[index], index, records.length, server, interaction.user);
+                const row   = recordCommand.buildNavButtons(index, records.length, targetUserId);
+
+                return interaction.editReply({ embeds: [embed], components: [row] });
+            }
+
             console.log(`按鈕被點擊: ${interaction.customId}`);
         }
         
@@ -241,10 +362,82 @@ module.exports = {
                 await handleSongAnswerModal(interaction);
                 return;
             }
+
+            if (interaction.customId === 'maimai_login_modal') {
+                await handleMaimaiLoginModal(interaction);
+                return;
+            }
         }
     },
 };
 
+async function handleMaimaiLoginModal(interaction) {
+    const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+    const userSessions = require('../utils/userSessions');
+
+    const SERVER_LABELS = { INT: '🌏 國際版 (International)', JP: '🇯🇵 日本版 (Japan)' };
+
+    const segaId = interaction.fields.getTextInputValue('sega_id').trim();
+    const password = interaction.fields.getTextInputValue('sega_password');
+    const primaryServer = userSessions.getServer(interaction.user.id);
+
+    // 立即延遲回覆（登入需要幾秒）
+    await interaction.deferReply({ ephemeral: true });
+
+    const { int: intErr, jp: jpErr } = await userSessions.loginBoth(interaction.user.id, segaId, password);
+
+    const intOk = intErr === null;
+    const jpOk  = jpErr  === null;
+
+    if (!intOk && !jpOk) {
+        // Both failed – likely wrong credentials
+        console.error(`[MaimaiLogin] 用戶 ${interaction.user.id} 兩個伺服器均登入失敗:`, intErr?.message);
+
+        const embed = new EmbedBuilder()
+            .setColor(0xFF4444)
+            .setTitle('❌ 登入失敗にゃ')
+            .setDescription('Salt 無法登入 maimai DX にゃ，請確認帳號和密碼是否正確にゃ')
+            .addFields(
+                { name: '🌏 國際版', value: `❌ ${intErr.message || '未知錯誤'}`, inline: false },
+                { name: '🇯🇵 日本版', value: `❌ ${jpErr.message || '未知錯誤'}`, inline: false },
+            )
+            .setFooter({ text: '如果問題持續，請稍後再試にゃ', iconURL: interaction.user.displayAvatarURL() })
+            .setTimestamp();
+
+        return interaction.editReply({ embeds: [embed] });
+    }
+
+    // At least one server succeeded
+    if (intErr) console.error(`[MaimaiLogin] 用戶 ${interaction.user.id} 國際版登入失敗:`, intErr.message);
+    if (jpErr)  console.error(`[MaimaiLogin] 用戶 ${interaction.user.id} 日本版登入失敗:`, jpErr.message);
+
+    const embed = new EmbedBuilder()
+        .setColor(intOk && jpOk ? 0x00C851 : 0xF39C12)
+        .setTitle(intOk && jpOk ? '✅ 登入成功！' : '⚠️ 部分伺服器登入成功にゃ')
+        .setDescription('Salt 幫你登入 maimai DX 了にゃ～')
+        .addFields(
+            { name: '👤 帳號', value: segaId, inline: true },
+            { name: '⭐ 主要伺服器', value: SERVER_LABELS[primaryServer], inline: true },
+            { name: '🕐 登入時間', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
+            { name: '🌏 國際版', value: intOk ? '✅ 已登入' : `❌ ${intErr.message}`, inline: true },
+            { name: '🇯🇵 日本版', value: jpOk  ? '✅ 已登入' : `❌ ${jpErr.message}`,  inline: true },
+        )
+        .setFooter({ text: 'Session 有效期為 1 小時にゃ，使用 /maimai-logout 可以登出', iconURL: interaction.user.displayAvatarURL() })
+        .setTimestamp();
+
+    const saveRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`maimai_creds_save_${interaction.user.id}`)
+            .setLabel('💾 儲存帳號密碼')
+            .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+            .setCustomId(`maimai_creds_nosave_${interaction.user.id}`)
+            .setLabel('❌ 不儲存')
+            .setStyle(ButtonStyle.Secondary),
+    );
+
+    await interaction.editReply({ embeds: [embed], components: [saveRow] });
+}
 // 輔助函數
 function createGameEmbed(gameId, songs, revealedLetters, wrongLetters, remainingWrongGuesses) {
     const { EmbedBuilder } = require('discord.js');

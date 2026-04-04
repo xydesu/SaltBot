@@ -37,3 +37,8 @@ Thumbs.db
 # 臨時文件
 *.tmp
 *.temp
+
+# 資料庫檔案（自動產生，不追蹤）
+data/*.db
+data/*.db-shm
+data/*.db-wal
