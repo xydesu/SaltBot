@@ -106,7 +106,7 @@ function isSegaLoginPage(html, finalUrl = '') {
     try {
         if (finalUrl && new URL(finalUrl).hostname === SEGA_AUTH_HOST) return true;
     } catch (e) {
-        if (!(e instanceof TypeError)) throw e; // URL 解析以外の予期せぬエラーは再スロー
+        if (!(e instanceof TypeError)) throw e; // 非 URL 格式錯誤將重新拋出
     }
     // 透過表單路徑或 SEGA ID 欄位名稱判斷
     return html.includes('common_auth/login') ||
@@ -116,15 +116,15 @@ function isSegaLoginPage(html, finalUrl = '') {
 /**
  * 判斷回應是否為 JP 原生登入表單頁面。
  * JP 伺服器的登入頁不重定向到 SEGA 認證主機，而是在相同網域顯示含
- * `segaId` 與 `token` 欄位的登入表單，必須與 isSegaLoginPage 分開處理。
+ * `segaId` 欄位的登入表單，必須與 isSegaLoginPage 分開處理。
+ * 注意：只用 segaId 欄位判斷，不使用 token 欄位，因為 token 亦存在於
+ * 已認證頁面的 CSRF 防護表單中，會造成誤判。
  * @param {string} html
  * @returns {boolean}
  */
 function isJPLoginPage(html) {
-    // JP 登入表單含有 segaId 輸入欄位與 CSRF token 隱藏欄位
-    const hasSegaIdField = /name=["']segaId["']/.test(html);
-    const hasCsrfTokenField = /name=["']token["']/.test(html) && /value=["'][^"']+["']/.test(html);
-    return hasSegaIdField || hasCsrfTokenField;
+    // segaId 輸入欄位僅出現在 JP 登入表單頁面，已認證頁面不含此欄位
+    return /name=["']segaId["']/.test(html);
 }
 
 /**
@@ -138,7 +138,7 @@ function isErrorPage(finalUrl = '') {
     try {
         return new URL(finalUrl).pathname.includes('/error');
     } catch (e) {
-        if (!(e instanceof TypeError)) throw e; // URL の解析エラー以外は再スロー
+        if (!(e instanceof TypeError)) throw e; // 非 URL 格式錯誤將重新拋出
     }
     return false;
 }
@@ -153,7 +153,7 @@ function isAimeListPage(html, finalUrl = '') {
     try {
         if (finalUrl && new URL(finalUrl).pathname.includes('aimeList')) return true;
     } catch (e) {
-        if (!(e instanceof TypeError)) throw e; // URL 解析以外の予期せぬエラーは再スロー
+        if (!(e instanceof TypeError)) throw e; // 非 URL 格式錯誤將重新拋出
     }
     return html.includes('aimeList/submit') && html.includes('idx=');
 }
@@ -332,7 +332,7 @@ class MaimaiSession {
             try {
                 finalHostIsSegaAuth = new URL(homeRes.finalUrl || '').hostname === SEGA_AUTH_HOST;
             } catch (e) {
-                if (!(e instanceof TypeError)) throw e; // 空字串造成 TypeError 屬預期情況，其他錯誤則再拋出
+                if (!(e instanceof TypeError)) throw e; // 非 URL 格式錯誤將重新拋出
             }
 
             if (!finalHostIsSegaAuth && token) {
