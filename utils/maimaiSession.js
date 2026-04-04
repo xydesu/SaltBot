@@ -1,5 +1,6 @@
 const https = require('https');
 const http = require('http');
+const zlib = require('zlib');
 const { URL } = require('url');
 const querystring = require('querystring');
 
@@ -69,12 +70,21 @@ function rawRequest(urlOrString, options = {}, body = null) {
 
         console.debug(`[rawRequest] --> ${reqOptions.method} ${url.toString()}`);
         console.debug(`[rawRequest]     Request headers: ${JSON.stringify(options.headers || {})}`);
-        if (body) console.debug(`[rawRequest]     Request body: ${body}`);
 
         const req = lib.request(reqOptions, (res) => {
+            const encoding = (res.headers['content-encoding'] || '').toLowerCase();
+            let stream = res;
+            if (encoding === 'gzip') {
+                stream = res.pipe(zlib.createGunzip());
+            } else if (encoding === 'deflate') {
+                stream = res.pipe(zlib.createInflate());
+            } else if (encoding === 'br') {
+                stream = res.pipe(zlib.createBrotliDecompress());
+            }
+
             let data = '';
-            res.on('data', chunk => { data += chunk; });
-            res.on('end', () => {
+            stream.on('data', chunk => { data += chunk; });
+            stream.on('end', () => {
                 console.debug(`[rawRequest] <-- ${res.statusCode} ${url.toString()}`);
                 console.debug(`[rawRequest]     Response headers: ${JSON.stringify(res.headers)}`);
                 if (res.headers['set-cookie']) {
@@ -86,6 +96,10 @@ function rawRequest(urlOrString, options = {}, body = null) {
                     headers: res.headers,
                     body: data,
                 });
+            });
+            stream.on('error', (err) => {
+                console.debug(`[rawRequest]     Decompression error: ${err.message}`);
+                reject(err);
             });
         });
 
@@ -157,6 +171,7 @@ class MaimaiSession {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
                 ...extraHeaders,
             };
             if (Object.keys(this._cookies).length > 0) {
