@@ -54,6 +54,9 @@ module.exports = {
         .setIntegrationTypes([ApplicationIntegrationType.GuildInstall, ApplicationIntegrationType.UserInstall])
         .setContexts([InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel]),
     async execute(interaction) {
+        await interaction.reply({ content: '⚠️ `/maimai-kop` 功能目前暫時關閉，等待下一屆 KOP 預選開啟後將重新啟用，敬請期待！', ephemeral: true });
+        return;
+
         await interaction.deferReply();
         
         // 用於累積進度訊息
