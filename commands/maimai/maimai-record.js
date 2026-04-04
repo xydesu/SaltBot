@@ -145,15 +145,22 @@ function extractAchievement(block) {
 function parseRecordBlock(block) {
     const record = {};
 
-    // Song title — try several class-name variants used across server versions
+    // Song title — try several class-name variants used across server versions.
+    // Intentionally excludes basic_block: that class is also used for score/data
+    // containers on the INT server, causing DX-score values to be misread as titles.
     const titleMatch = block.match(/class="[^"]*music_name_block[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
         || block.match(/class="[^"]*music_name[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
-        || block.match(/class="[^"]*music_title[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
-        || block.match(/class="[^"]*basic_block[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+        || block.match(/class="[^"]*music_title[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
     if (titleMatch) {
         const raw = stripHtml(titleMatch[1]);
-        // Reject values that look like percentages, dates, scores, or single digits
-        if (raw && !/^[\d,]+$/.test(raw) && !/%/.test(raw) && !/^\d{4}[\/\-]/.test(raw)) {
+        // Reject values that look like percentages, dates, plain numbers, or
+        // DX-score fractions (e.g. "2,021 / 2,454").
+        if (raw
+            && !/^[\d,]+$/.test(raw)
+            && !/%/.test(raw)
+            && !/^\d{4}[\/\-]/.test(raw)
+            && !/^\d[\d,\s]*\/[\d,\s]*\d$/.test(raw) // reject DX-score fractions (e.g. "2,021 / 2,454")
+        ) {
             record.title = raw;
         }
     }
@@ -251,10 +258,13 @@ function parseRecords(html) {
         if (record.title && block.length < MAX_SINGLE_RECORD_BLOCK_SIZE) records.push(record);
     }
 
-    // Fallback A: split on known title-class divs — works when the title div precedes music_kind_icon
+    // Fallback A: split on known title-class divs — works when the title div precedes music_kind_icon.
+    // We split only on music_name_block (not basic_block) because basic_block is also used for
+    // score/data containers on the INT server, which would fragment each record into multiple
+    // segments and prevent titles from being paired with their achievement data.
     if (records.length === 0) {
         console.log('[maimai-record] 主要解析未找到記錄，嘗試 music_name_block 備援方法');
-        const parts = html.split(/(?=<div[^>]+class="[^"]*(?:music_name_block|basic_block)[^"]*")/i);
+        const parts = html.split(/(?=<div[^>]+class="[^"]*music_name_block[^"]*")/i);
         console.log(`[maimai-record] music_name_block 備援方法找到 ${parts.length - 1} 個區段`);
         if (parts.length > 1) {
             console.log(`[maimai-record] 備援 A 區段 #1 前800字元:\n${parts[1].substring(0, 800)}`);
@@ -264,7 +274,10 @@ function parseRecords(html) {
             if (!hasRecordIndicators(part)) continue;
             const record = parseRecordBlock(part);
             console.log(`[maimai-record] 備援 A 區段 #${i + 1} 解析結果: title="${record.title}" diff="${record.difficulty}" achievement="${record.achievement}" rank="${record.rank}"`);
-            if (record.title || record.achievement || record.rank) records.push(record);
+            // Only push records that have a valid title so that segments which contain
+            // achievement data but no title (INT server layout) don't fill the cache and
+            // prevent fallback B from running.
+            if (record.title) records.push(record);
         }
     }
 
