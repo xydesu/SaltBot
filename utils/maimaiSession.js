@@ -7,6 +7,7 @@ const querystring = require('querystring');
 const MAIMAI_BASE_URL = 'https://maimaidx-eng.com/maimai-mobile/';
 const SEGA_AUTH_HOST = 'lng-tgk-aime-gw.am-all.net';
 const SEGA_AUTH_PATH = '/common_auth/login';
+const SEGA_AUTH_POST_PATH = '/common_auth/login/sid';
 const LOGIN_TIMEOUT_MS = 15000;
 const SESSION_LIFETIME_MS = 60 * 60 * 1000; // 1 hour
 
@@ -28,22 +29,6 @@ function parseSetCookieHeaders(headers) {
             value: nameValue.slice(eqIdx + 1).trim(),
         };
     }).filter(Boolean);
-}
-
-/**
- * 從 HTML 中萃取 <input> 隱藏欄位的值
- * @param {string} html
- * @param {string} name
- * @returns {string|null}
- */
-function extractInputValue(html, name) {
-    const re = new RegExp(`<input[^>]+name=["']${name}["'][^>]+value=["']([^"']*)["']`, 'i');
-    const m = re.exec(html);
-    if (m) return m[1];
-    // 嘗試 value 在 name 之前的情況
-    const re2 = new RegExp(`<input[^>]+value=["']([^"']*)["'][^>]+name=["']${name}["']`, 'i');
-    const m2 = re2.exec(html);
-    return m2 ? m2[1] : null;
 }
 
 /**
@@ -131,9 +116,9 @@ function isSegaLoginPage(html, finalUrl = '') {
     try {
         if (finalUrl && new URL(finalUrl).hostname === SEGA_AUTH_HOST) return true;
     } catch { /* 忽略無效 URL */ }
-    // 使用具體的表單欄位名稱，避免誤判包含 'segaId' 字串的一般頁面
+    // 透過表單路徑或 SEGA ID 欄位名稱判斷
     return html.includes('common_auth/login') ||
-        /name=["']segaId["']/.test(html);
+        /name=["']sid["']/.test(html);
 }
 
 class MaimaiSession {
@@ -274,10 +259,9 @@ class MaimaiSession {
             return;
         }
 
-        // 步驟 2：取得 SEGA 認證頁面（_get 已自動跟隨重定向）
-        // 使用真實重定向後的最終 URL（含 service_id、redirect_url 等查詢參數）
-        // 使用 URL 解析正確比對主機名，避免路徑中出現主機名而被誤判
-        let authPageHtml = homeRes.body;
+        // 步驟 2：取得 SEGA 登入表單
+        // SEGA 認證伺服器首次 GET 固定回傳空 body（Session 建立），
+        // 必須帶著 JSESSIONID 再次 GET 才能取得含表單的完整頁面。
         let authPageUrl;
         try {
             const finalUrlObj = new URL(homeRes.finalUrl);
@@ -288,32 +272,21 @@ class MaimaiSession {
             authPageUrl = `https://${SEGA_AUTH_HOST}${SEGA_AUTH_PATH}`;
         }
         console.debug(`[login] Step 2: authPageUrl=${authPageUrl}`);
+        console.log('[MaimaiSession] 正在取得 SEGA 登入表單にゃ…');
+        const authRes = await this._get(authPageUrl);
+        if (authRes.finalUrl) authPageUrl = authRes.finalUrl;
+        console.debug(`[login] Step 2: authRes status=${authRes.statusCode} finalUrl=${authRes.finalUrl}`);
+        console.debug(`[login] Step 2: body snippet: ${authRes.body.slice(0, 300)}`);
 
-        // 若 _get 最終停在 SEGA 認證頁面，萃取 token 等隱藏欄位
-        const token = extractInputValue(authPageHtml, 'token');
-        console.debug(`[login] Step 2: token from homeRes=${token !== null ? `"${token}"` : 'null (not found)'}`);
-
-        if (!token) {
-            // 重新取得認證頁面（可能 homeRes 不是 SEGA 登入頁）
-            console.log('[MaimaiSession] 嘗試直接存取 SEGA 認證頁面にゃ…');
-            const authRes = await this._get(authPageUrl);
-            authPageHtml = authRes.body;
-            // 更新為最終 URL
-            if (authRes.finalUrl) authPageUrl = authRes.finalUrl;
-            console.debug(`[login] Step 2 (retry): authRes status=${authRes.statusCode} finalUrl=${authRes.finalUrl}`);
-            console.debug(`[login] Step 2 (retry): body snippet: ${authPageHtml.slice(0, 300)}`);
-        }
-
-        const csrfToken = extractInputValue(authPageHtml, 'token') || '';
-        console.debug(`[login] Step 2: csrfToken=${csrfToken ? `"${csrfToken.slice(0, 8)}…"` : '(empty)'}`);
-
-        // 步驟 3：POST 憑證到 SEGA 認證端點（使用含查詢參數的完整 URL）
+        // 步驟 3：POST 憑證到 SEGA 登入端點
+        // 表單 action="/common_auth/login/sid"，欄位為 sid / password / retention
+        const postUrl = `https://${SEGA_AUTH_HOST}${SEGA_AUTH_POST_PATH}`;
         console.log('[MaimaiSession] 正在提交 SEGA ID 憑證にゃ…');
-        console.debug(`[login] Step 3: POSTing to ${authPageUrl}`);
-        const postRes = await this._post(authPageUrl, {
-            segaId,
+        console.debug(`[login] Step 3: POSTing to ${postUrl}`);
+        const postRes = await this._post(postUrl, {
+            sid: segaId,
             password,
-            token: csrfToken,
+            retention: '1',
         });
 
         console.debug(`[login] Step 3: postRes status=${postRes.statusCode} location=${postRes.headers.location || '(none)'}`);
