@@ -46,6 +46,31 @@ function parseDifficulty(src) {
 function parseRank(src) {
     if (!src) return null;
     const s = src.toLowerCase();
+
+    // Primary: extract rank name directly from "scorerankicon_<name>.png" paths
+    // e.g. /img/playlog/ui_scorerankicon_sssplus.png  →  name = "sssplus"
+    const iconMatch = s.match(/scorerankicon_([a-z_]+?)(?:\.png|\.gif|\.jpg|$)/);
+    if (iconMatch) {
+        const name = iconMatch[1];
+        if (name === 'sssplus'  || name === 'sss_plus')  return 'SSS+';
+        if (name === 'sss')                              return 'SSS';
+        if (name === 'ssplus'   || name === 'ss_plus')   return 'SS+';
+        if (name === 'ss')                               return 'SS';
+        if (name === 'splus'    || name === 's_plus')    return 'S+';
+        if (name === 's')                                return 'S';
+        if (name === 'aaa')                              return 'AAA';
+        if (name === 'aaplus'   || name === 'aa_plus')   return 'AA+';
+        if (name === 'aa')                               return 'AA';
+        if (name === 'aplus'    || name === 'a_plus')    return 'A+';
+        if (name === 'a')                                return 'A';
+        if (name === 'bbb')                              return 'BBB';
+        if (name === 'bb')                               return 'BB';
+        if (name === 'b')                                return 'B';
+        if (name === 'c')                                return 'C';
+        if (name === 'd')                                return 'D';
+    }
+
+    // Fallback: substring checks on the full src string
     if (s.includes('sss_plus') || s.includes('sssplus')) return 'SSS+';
     if (s.includes('sss'))                               return 'SSS';
     if (s.includes('ss_plus')  || s.includes('ssplus'))  return 'SS+';
@@ -107,8 +132,10 @@ function extractAchievement(block) {
 function parseRecordBlock(block) {
     const record = {};
 
-    // Song title
-    const titleMatch = block.match(/class="[^"]*music_name_block[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+    // Song title — try several class-name variants used across server versions
+    const titleMatch = block.match(/class="[^"]*music_name_block[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
+        || block.match(/class="[^"]*music_name[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
+        || block.match(/class="[^"]*music_title[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
     if (titleMatch) record.title = titleMatch[1].replace(/<[^>]+>/g, '').trim();
 
     // Difficulty
@@ -119,10 +146,18 @@ function parseRecordBlock(block) {
     // Achievement rate
     record.achievement = extractAchievement(block);
 
-    // Rank badge
-    const rankMatch = block.match(/<img[^>]+class="[^"]*playlog_scorerank[^"]*"[^>]+src="([^"]+)"/i)
+    // Rank badge — handle both attribute orderings and the ui_scorerankicon_ path convention
+    const rankMatch =
+        // class before src
+        block.match(/<img[^>]+class="[^"]*playlog_scorerank[^"]*"[^>]+src="([^"]+)"/i)
+        // src before class
+        || block.match(/<img[^>]+src="([^"]+)"[^>]+class="[^"]*playlog_scorerank[^"]*"/i)
+        // src contains "scorerank" (covers scorerank_xxx.png variants)
         || block.match(/<img[^>]+src="([^"]*scorerank[^"]*)"[^>]*/i)
-        || block.match(/<img[^>]+src="([^"]*\/playlog\/[a-z_]+\.png)"[^>]*class="[^"]*scorerank[^"]*"/i);
+        // src contains "scorerankicon" (covers ui_scorerankicon_xxx.png)
+        || block.match(/<img[^>]+src="([^"]*scorerankicon[^"]*)"[^>]*/i)
+        // generic /playlog/ image that matches any rank token in its filename
+        || block.match(/<img[^>]+src="([^"]*\/playlog\/[^"]*(?:sss|ss|aaa|aa|bbb|bb)[^"]*\.png)"[^>]*/i);
     if (rankMatch) record.rank = parseRank(rankMatch[1]);
 
     // FC / AP status
@@ -157,13 +192,13 @@ function parseRecords(html) {
     console.log(`[maimai-record] parseRecords 開始解析，HTML 長度: ${html.length} 字元`);
     const records = [];
 
-    // Primary: split on "main_wrapper" divs, each wraps one record entry
-    const blockRe = /<div[^>]+class="[^"]*main_wrapper[^"]*"[^>]*>([\s\S]*?)(?=<div[^>]+class="[^"]*main_wrapper|<\/body>|$)/gi;
+    // Primary: split on common record-entry wrapper divs (main_wrapper, w_450, p_r)
+    const blockRe = /<div[^>]+class="[^"]*(?:main_wrapper|w_450)[^"]*"[^>]*>([\s\S]*?)(?=<div[^>]+class="[^"]*(?:main_wrapper|w_450)[^"]*"|<\/body>|$)/gi;
     let match;
     let blockCount = 0;
     while ((match = blockRe.exec(html)) !== null) {
         const block = match[1];
-        if (!block.includes('music_name_block')) continue;
+        if (!block.includes('music_name_block') && !block.includes('music_name') && !block.includes('playlog_diff')) continue;
         blockCount++;
         console.log(`[maimai-record] 找到記錄區塊 #${blockCount}（長度: ${block.length} 字元）`);
         const record = parseRecordBlock(block);
@@ -171,15 +206,35 @@ function parseRecords(html) {
         if (record.title) records.push(record);
     }
 
-    // Fallback: split on the music_kind_icon img tag which starts each entry
+    // Fallback A: split on music_name_block — works when the title div precedes music_kind_icon
     if (records.length === 0) {
-        console.log('[maimai-record] 主要解析未找到記錄，使用 music_kind_icon 備援方法');
+        console.log('[maimai-record] 主要解析未找到記錄，嘗試 music_name_block 備援方法');
+        const parts = html.split(/(?=<div[^>]+class="[^"]*music_name_block)/i);
+        console.log(`[maimai-record] music_name_block 備援方法找到 ${parts.length - 1} 個區段`);
+        if (parts.length > 1) {
+            console.log(`[maimai-record] 備援 A 區段 #1 前800字元:\n${parts[1].substring(0, 800)}`);
+        }
+        for (let i = 0; i < parts.slice(1).length; i++) {
+            const part = parts[i + 1];
+            if (!part.includes('playlog_diff') && !part.includes('playlog_achievement')) continue;
+            const record = parseRecordBlock(part);
+            console.log(`[maimai-record] 備援 A 區段 #${i + 1} 解析結果: title="${record.title}" diff="${record.difficulty}" achievement="${record.achievement}" rank="${record.rank}"`);
+            if (record.title) records.push(record);
+        }
+    }
+
+    // Fallback B: split on music_kind_icon — works when the type icon precedes the title
+    if (records.length === 0) {
+        console.log('[maimai-record] 備援 A 無效，使用 music_kind_icon 備援方法');
         const parts = html.split(/(?=<img[^>]+class="[^"]*music_kind_icon)/i);
-        console.log(`[maimai-record] 備援方法找到 ${parts.length - 1} 個區段`);
+        console.log(`[maimai-record] music_kind_icon 備援方法找到 ${parts.length - 1} 個區段`);
+        if (parts.length > 1) {
+            console.log(`[maimai-record] 備援 B 區段 #1 前800字元:\n${parts[1].substring(0, 800)}`);
+        }
         for (let i = 0; i < parts.slice(1).length; i++) {
             const part = parts[i + 1];
             const record = parseRecordBlock(part);
-            console.log(`[maimai-record] 備援區段 #${i + 1} 解析結果: title="${record.title}" diff="${record.difficulty}" achievement="${record.achievement}" rank="${record.rank}"`);
+            console.log(`[maimai-record] 備援 B 區段 #${i + 1} 解析結果: title="${record.title}" diff="${record.difficulty}" achievement="${record.achievement}" rank="${record.rank}"`);
             if (record.title) records.push(record);
         }
     }
