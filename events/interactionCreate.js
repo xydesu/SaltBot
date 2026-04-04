@@ -225,6 +225,55 @@ module.exports = {
                 return;
             }
             
+            // 帳號密碼儲存按鈕處理
+            if (interaction.customId.startsWith('maimai_creds_save_')) {
+                const targetUserId = interaction.customId.replace('maimai_creds_save_', '');
+                if (interaction.user.id !== targetUserId) {
+                    return interaction.reply({ content: '❌ 這不是你的按鈕にゃ！', ephemeral: true });
+                }
+                const userSessions = require('../utils/userSessions');
+                const { segaId, password } = userSessions.getSession(targetUserId, 'INT').getCredentials();
+                if (!segaId || !password) {
+                    return interaction.reply({ content: '❌ 找不到帳號資料，請重新執行 `/maimai-login` にゃ', ephemeral: true });
+                }
+                const db = require('../utils/database');
+                db.saveCredentials(targetUserId, segaId, password);
+                await interaction.update({
+                    content: '✅ 帳號密碼已安全儲存にゃ！下次使用 `/maimai-login` 時將會自動登入にゃ～',
+                    embeds: [],
+                    components: [],
+                });
+                return;
+            }
+
+            if (interaction.customId.startsWith('maimai_creds_nosave_')) {
+                const targetUserId = interaction.customId.replace('maimai_creds_nosave_', '');
+                if (interaction.user.id !== targetUserId) {
+                    return interaction.reply({ content: '❌ 這不是你的按鈕にゃ！', ephemeral: true });
+                }
+                await interaction.update({
+                    content: '✅ 了解にゃ！帳號密碼不會被儲存にゃ～',
+                    embeds: [],
+                    components: [],
+                });
+                return;
+            }
+
+            if (interaction.customId.startsWith('maimai_creds_delete_')) {
+                const targetUserId = interaction.customId.replace('maimai_creds_delete_', '');
+                if (interaction.user.id !== targetUserId) {
+                    return interaction.reply({ content: '❌ 這不是你的按鈕にゃ！', ephemeral: true });
+                }
+                const userSessions = require('../utils/userSessions');
+                userSessions.deleteAutoLogin(targetUserId);
+                await interaction.update({
+                    content: '🗑️ 已儲存的帳號密碼已刪除にゃ！',
+                    embeds: [],
+                    components: [],
+                });
+                return;
+            }
+
             // 遊玩記錄導航按鈕處理
             if (interaction.customId.startsWith('maimai_record_')) {
                 // customId format: maimai_record_{action}_{userId}
@@ -310,7 +359,7 @@ module.exports = {
 };
 
 async function handleMaimaiLoginModal(interaction) {
-    const { EmbedBuilder } = require('discord.js');
+    const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
     const userSessions = require('../utils/userSessions');
 
     const SERVER_LABELS = { INT: '🌏 國際版 (International)', JP: '🇯🇵 日本版 (Japan)' };
@@ -363,9 +412,19 @@ async function handleMaimaiLoginModal(interaction) {
         .setFooter({ text: 'Session 有效期為 1 小時にゃ，使用 /maimai-logout 可以登出', iconURL: interaction.user.displayAvatarURL() })
         .setTimestamp();
 
-    await interaction.editReply({ embeds: [embed] });
-}
+    const saveRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`maimai_creds_save_${interaction.user.id}`)
+            .setLabel('💾 儲存帳號密碼')
+            .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+            .setCustomId(`maimai_creds_nosave_${interaction.user.id}`)
+            .setLabel('❌ 不儲存')
+            .setStyle(ButtonStyle.Secondary),
+    );
 
+    await interaction.editReply({ embeds: [embed], components: [saveRow] });
+}
 // 輔助函數
 function createGameEmbed(gameId, songs, revealedLetters, wrongLetters, remainingWrongGuesses) {
     const { EmbedBuilder } = require('discord.js');

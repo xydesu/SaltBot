@@ -101,6 +101,36 @@ class UserSessionStore {
         const jpSession = this._jpSessions.get(userId);
         if (jpSession)  { jpSession.clearSession();  this._jpSessions.delete(userId); }
     }
+
+    // ── 已儲存的帳號密碼（SQLite 永久儲存） ──────────────────────
+
+    /**
+     * 用戶是否有儲存的帳號密碼（可用於自動登入）
+     * @param {string} userId Discord 用戶 ID
+     * @returns {boolean}
+     */
+    hasAutoLogin(userId) {
+        return db.hasCredentials(userId);
+    }
+
+    /**
+     * 使用已儲存的帳號密碼同時登入兩個伺服器
+     * @param {string} userId Discord 用戶 ID
+     * @returns {Promise<{ int: Error|null, jp: Error|null }>}
+     */
+    async loginWithSaved(userId) {
+        const creds = db.loadCredentials(userId);
+        if (!creds) throw new Error('找不到已儲存的帳號資料にゃ');
+        return this.loginBoth(userId, creds.segaId, creds.password);
+    }
+
+    /**
+     * 刪除用戶已儲存的帳號密碼
+     * @param {string} userId Discord 用戶 ID
+     */
+    deleteAutoLogin(userId) {
+        db.deleteCredentials(userId);
+    }
 }
 
 module.exports = new UserSessionStore();

@@ -349,6 +349,14 @@ class MaimaiSession {
     }
 
     /**
+     * 取得目前已儲存的登入憑證（供儲存至資料庫使用）
+     * @returns {{ segaId: string|null, password: string|null }}
+     */
+    getCredentials() {
+        return { segaId: this._segaId, password: this._password };
+    }
+
+    /**
      * 清除目前 Session（登出），同時清除儲存的憑證
      */
     clearSession() {
