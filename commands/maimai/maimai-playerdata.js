@@ -17,6 +17,18 @@ const SERVER_COLORS = {
 };
 
 /**
+ * Strip all HTML tags from a string, looping until no tags remain.
+ * @param {string} html
+ * @returns {string}
+ */
+function stripHtml(html) {
+    let s = html;
+    let prev;
+    do { prev = s; s = s.replace(/<[^>]+>/g, ''); } while (s !== prev);
+    return s.trim();
+}
+
+/**
  * 從 playerData 頁面 HTML 中擷取玩家資料
  * @param {string} html
  * @returns {object}
@@ -26,12 +38,12 @@ function parsePlayerData(html) {
 
     // 玩家名稱
     const nameMatch = html.match(/<div\s+class="name_block[^"]*"[^>]*>\s*([\s\S]*?)\s*<\/div>/i);
-    if (nameMatch) data.name = nameMatch[1].replace(/<[^>]+>/g, '').trim();
+    if (nameMatch) data.name = stripHtml(nameMatch[1]);
 
     // 稱號（title）
     const titleMatch = html.match(/<div\s+class="[^"]*trophy_block[^"]*"[^>]*>\s*<span[^>]*>([\s\S]*?)<\/span>/i)
         || html.match(/<div\s+class="[^"]*title_block[^"]*"[^>]*>\s*([\s\S]*?)\s*<\/div>/i);
-    if (titleMatch) data.title = titleMatch[1].replace(/<[^>]+>/g, '').trim();
+    if (titleMatch) data.title = stripHtml(titleMatch[1]);
 
     // Rating（方框數字）
     const ratingMatch = html.match(/<div\s+class="[^"]*rating_block[^"]*"[^>]*>\s*([\d,]+)\s*<\/div>/i)

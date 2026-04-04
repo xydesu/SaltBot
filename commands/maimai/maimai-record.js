@@ -208,6 +208,29 @@ function parseRecordBlock(block) {
  * @param {string} html
  * @returns {Array<object>}
  */
+
+// Individual record blocks are typically a few KB.  Any block larger than this
+// threshold almost certainly wraps the entire record list in a single container
+// div (observed on the INT server with ~146 KB).  Skip these so the fallback
+// splitters can decompose them into per-record segments.
+const MAX_SINGLE_RECORD_BLOCK_SIZE = 10000;
+
+/**
+ * Returns true when a segment of HTML contains indicators that it holds a
+ * playlog/record entry — used to filter out obvious non-record segments from
+ * the fallback splitters without dropping INT-server entries that don't use
+ * the same class names as the JP server.
+ * @param {string} html
+ * @returns {boolean}
+ */
+function hasRecordIndicators(html) {
+    return html.includes('playlog_diff')
+        || html.includes('playlog_achievement')
+        || /\d{2,3}\.\d{4}%/.test(html)
+        || html.includes('diff_')
+        || html.includes('scorerankicon');
+}
+
 function parseRecords(html) {
     console.log(`[maimai-record] parseRecords 開始解析，HTML 長度: ${html.length} 字元`);
     const records = [];
@@ -225,7 +248,7 @@ function parseRecords(html) {
         console.log(`[maimai-record] 區塊 #${blockCount} 解析結果: title="${record.title}" diff="${record.difficulty}" achievement="${record.achievement}" rank="${record.rank}" fc="${record.fc}" type="${record.musicType}" date="${record.date}" dxScore="${record.dxScore}"`);
         // A very large block likely contains multiple records in a single wrapper;
         // treat it as a container (don't count it) so the fallbacks can sub-split it.
-        if (record.title && block.length < 10000) records.push(record);
+        if (record.title && block.length < MAX_SINGLE_RECORD_BLOCK_SIZE) records.push(record);
     }
 
     // Fallback A: split on known title-class divs — works when the title div precedes music_kind_icon
@@ -238,7 +261,7 @@ function parseRecords(html) {
         }
         for (let i = 0; i < parts.slice(1).length; i++) {
             const part = parts[i + 1];
-            if (!part.includes('playlog_diff') && !part.includes('playlog_achievement') && !/\d{2,3}\.\d{4}%/.test(part) && !part.includes('diff_') && !part.includes('scorerankicon')) continue;
+            if (!hasRecordIndicators(part)) continue;
             const record = parseRecordBlock(part);
             console.log(`[maimai-record] 備援 A 區段 #${i + 1} 解析結果: title="${record.title}" diff="${record.difficulty}" achievement="${record.achievement}" rank="${record.rank}"`);
             if (record.title || record.achievement || record.rank) records.push(record);
