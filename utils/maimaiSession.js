@@ -4,7 +4,8 @@ const zlib = require('zlib');
 const { URL } = require('url');
 const querystring = require('querystring');
 
-const MAIMAI_BASE_URL = 'https://maimaidx-eng.com/maimai-mobile/';
+const MAIMAI_BASE_URL_INT = 'https://maimaidx-eng.com/maimai-mobile/';
+const MAIMAI_BASE_URL_JP  = 'https://maimaidx.jp/maimai-mobile/';
 const SEGA_AUTH_HOST = 'lng-tgk-aime-gw.am-all.net';
 const SEGA_AUTH_PATH = '/common_auth/login';
 const SEGA_AUTH_POST_PATH = '/common_auth/login/sid';
@@ -68,8 +69,6 @@ function rawRequest(urlOrString, options = {}, body = null) {
             let data = '';
             stream.on('data', chunk => { data += chunk; });
             stream.on('end', () => {
-                if (res.headers['set-cookie']) {
-                }
                 resolve({
                     statusCode: res.statusCode,
                     headers: res.headers,
@@ -113,7 +112,11 @@ function isSegaLoginPage(html, finalUrl = '') {
 }
 
 class MaimaiSession {
-    constructor() {
+    /**
+     * @param {string} [baseUrl] maimai-mobile 基底 URL（預設為國際版）
+     */
+    constructor(baseUrl = MAIMAI_BASE_URL_INT) {
+        this._baseUrl = baseUrl;
         /** @type {Record<string, string>} */
         this._cookies = {};
         this._loggedIn = false;
@@ -200,7 +203,7 @@ class MaimaiSession {
     // ── 登入流程 ──────────────────────────────────────────────────
 
     /**
-     * 登入 maimaidx-eng.com。
+     * 登入設定的 maimai DX 伺服器（國際版或日本版，取決於建構時傳入的 baseUrl）。
      * @param {string} [segaId] SEGA ID（省略時使用環境變數 MAIMAI_SEGA_ID）
      * @param {string} [password] 密碼（省略時使用環境變數 MAIMAI_PASSWORD）
      * @throws {Error} 若憑證未提供或登入失敗
@@ -221,7 +224,7 @@ class MaimaiSession {
 
         // 步驟 1：存取 maimai 首頁，取得 SEGA 認證重定向 URL
         console.log('[MaimaiSession] 正在存取 maimai DX 首頁にゃ…');
-        const homeRes = await this._get(MAIMAI_BASE_URL);
+        const homeRes = await this._get(this._baseUrl);
 
 
         // 若已登入（狀態 200 且無重定向到 SEGA 認證），直接判定成功
@@ -270,7 +273,7 @@ class MaimaiSession {
 
         // 步驟 5：驗證登入狀態
         console.log('[MaimaiSession] 驗證登入狀態にゃ…');
-        const verifyRes = await this._get(MAIMAI_BASE_URL);
+        const verifyRes = await this._get(this._baseUrl);
 
 
         if (verifyRes.statusCode !== 200) {
@@ -315,7 +318,7 @@ class MaimaiSession {
      */
     async authenticatedGet(path) {
         await this.ensureSession();
-        const url = new URL(path, MAIMAI_BASE_URL).toString();
+        const url = new URL(path, this._baseUrl).toString();
         const res = await this._get(url);
 
 
@@ -358,6 +361,8 @@ class MaimaiSession {
     }
 }
 
-// 匯出單例實例（預設使用環境變數），同時匯出類別供每用戶 Session 使用
-module.exports = new MaimaiSession();
+// 匯出單例實例（預設使用國際版環境變數），同時匯出類別及 URL 常數
+module.exports = new MaimaiSession(MAIMAI_BASE_URL_INT);
 module.exports.MaimaiSession = MaimaiSession;
+module.exports.MAIMAI_BASE_URL_INT = MAIMAI_BASE_URL_INT;
+module.exports.MAIMAI_BASE_URL_JP  = MAIMAI_BASE_URL_JP;
