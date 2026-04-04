@@ -119,11 +119,18 @@ function rawRequest(urlOrString, options = {}, body = null) {
 }
 
 /**
- * 判斷 HTML 是否為 SEGA 登入頁面
+ * 判斷回應是否為 SEGA 登入頁面。
+ * 同時檢查最終 URL（空 body 時 SEGA 伺服器仍回傳 200，導致 body 判斷失效）
+ * 和 HTML 內容，避免誤判。
  * @param {string} html
+ * @param {string} [finalUrl]
  * @returns {boolean}
  */
-function isSegaLoginPage(html) {
+function isSegaLoginPage(html, finalUrl = '') {
+    // 若最終落點在 SEGA 認證主機，無論 body 是否為空皆視為登入頁
+    try {
+        if (finalUrl && new URL(finalUrl).hostname === SEGA_AUTH_HOST) return true;
+    } catch { /* 忽略無效 URL */ }
     // 使用具體的表單欄位名稱，避免誤判包含 'segaId' 字串的一般頁面
     return html.includes('common_auth/login') ||
         /name=["']segaId["']/.test(html);
@@ -256,11 +263,11 @@ class MaimaiSession {
         const homeRes = await this._get(MAIMAI_BASE_URL);
 
         console.debug(`[login] Step 1: homeRes status=${homeRes.statusCode} finalUrl=${homeRes.finalUrl}`);
-        console.debug(`[login] Step 1: isSegaLoginPage=${isSegaLoginPage(homeRes.body)}`);
+        console.debug(`[login] Step 1: isSegaLoginPage=${isSegaLoginPage(homeRes.body, homeRes.finalUrl)}`);
         console.debug(`[login] Step 1: body snippet: ${homeRes.body.slice(0, 300)}`);
 
         // 若已登入（狀態 200 且無重定向到 SEGA 認證），直接判定成功
-        if (homeRes.statusCode === 200 && !isSegaLoginPage(homeRes.body)) {
+        if (homeRes.statusCode === 200 && !isSegaLoginPage(homeRes.body, homeRes.finalUrl)) {
             this._loggedIn = true;
             this._loginTime = Date.now();
             console.log('[MaimaiSession] 已存在有效 Session にゃ');
@@ -328,7 +335,7 @@ class MaimaiSession {
         const verifyRes = await this._get(MAIMAI_BASE_URL);
 
         console.debug(`[login] Step 5: verifyRes status=${verifyRes.statusCode} finalUrl=${verifyRes.finalUrl}`);
-        console.debug(`[login] Step 5: isSegaLoginPage=${isSegaLoginPage(verifyRes.body)}`);
+        console.debug(`[login] Step 5: isSegaLoginPage=${isSegaLoginPage(verifyRes.body, verifyRes.finalUrl)}`);
         console.debug(`[login] Step 5: body snippet: ${verifyRes.body.slice(0, 300)}`);
 
         if (verifyRes.statusCode !== 200) {
@@ -336,7 +343,7 @@ class MaimaiSession {
         }
 
         // 若頁面仍要求登入則視為失敗
-        if (isSegaLoginPage(verifyRes.body)) {
+        if (isSegaLoginPage(verifyRes.body, verifyRes.finalUrl)) {
             throw new Error('帳號或密碼錯誤，登入 maimai DX 失敗にゃ');
         }
 
@@ -377,18 +384,18 @@ class MaimaiSession {
         console.debug(`[authenticatedGet] GET ${url}`);
         const res = await this._get(url);
 
-        console.debug(`[authenticatedGet] status=${res.statusCode} finalUrl=${res.finalUrl} isSegaLoginPage=${isSegaLoginPage(res.body)}`);
+        console.debug(`[authenticatedGet] status=${res.statusCode} finalUrl=${res.finalUrl} isSegaLoginPage=${isSegaLoginPage(res.body, res.finalUrl)}`);
 
         // 若被重定向到登入頁，嘗試重新登入一次
-        if (isSegaLoginPage(res.body)) {
+        if (isSegaLoginPage(res.body, res.finalUrl)) {
             console.log('[MaimaiSession] Session 已過期，重新登入にゃ…');
             console.debug(`[authenticatedGet] Login page detected, triggering re-login. Body snippet: ${res.body.slice(0, 200)}`);
             this._loggedIn = false;
             await this.ensureSession();
             const retryRes = await this._get(url);
-            console.debug(`[authenticatedGet] Retry status=${retryRes.statusCode} isSegaLoginPage=${isSegaLoginPage(retryRes.body)}`);
+            console.debug(`[authenticatedGet] Retry status=${retryRes.statusCode} isSegaLoginPage=${isSegaLoginPage(retryRes.body, retryRes.finalUrl)}`);
             // 若重新登入後仍無法存取，拋出錯誤
-            if (isSegaLoginPage(retryRes.body)) {
+            if (isSegaLoginPage(retryRes.body, retryRes.finalUrl)) {
                 throw new Error('Session 過期且自動重新登入失敗，請重新執行 /maimai-login にゃ');
             }
             return retryRes;
