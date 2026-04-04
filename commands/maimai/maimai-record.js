@@ -367,13 +367,37 @@ module.exports = {
         console.log(`[maimai-record] 指令觸發 userId=${userId} server=${server}`);
 
         if (!userSessions.isLoggedIn(userId)) {
-            console.log(`[maimai-record] 用戶 ${userId} 尚未登入，拒絕執行`);
-            const embed = new EmbedBuilder()
-                .setColor(0xFF6B6B)
-                .setTitle('❌ 尚未登入にゃ')
-                .setDescription('請先使用 `/maimai-login` 登入你的 SEGA 帳號にゃ～')
-                .setTimestamp();
-            return interaction.editReply({ embeds: [embed] });
+            if (userSessions.hasAutoLogin(userId)) {
+                console.log(`[maimai-record] 用戶 ${userId} 尚未登入，嘗試使用已儲存帳號自動登入`);
+                try {
+                    const { int: intErr, jp: jpErr } = await userSessions.loginWithSaved(userId);
+                    const loginErr = server === 'JP' ? jpErr : intErr;
+                    if (loginErr) {
+                        const embed = new EmbedBuilder()
+                            .setColor(0xFF6B6B)
+                            .setTitle('❌ 自動登入失敗にゃ')
+                            .setDescription(`使用已儲存帳號自動登入失敗：${loginErr.message}\n請使用 \`/maimai-login\` 重新登入にゃ～`)
+                            .setTimestamp();
+                        return interaction.editReply({ embeds: [embed] });
+                    }
+                    console.log(`[maimai-record] 用戶 ${userId} 自動登入成功`);
+                } catch (autoLoginErr) {
+                    const embed = new EmbedBuilder()
+                        .setColor(0xFF6B6B)
+                        .setTitle('❌ 自動登入失敗にゃ')
+                        .setDescription(`使用已儲存帳號自動登入失敗：${autoLoginErr.message}\n請使用 \`/maimai-login\` 重新登入にゃ～`)
+                        .setTimestamp();
+                    return interaction.editReply({ embeds: [embed] });
+                }
+            } else {
+                console.log(`[maimai-record] 用戶 ${userId} 尚未登入，拒絕執行`);
+                const embed = new EmbedBuilder()
+                    .setColor(0xFF6B6B)
+                    .setTitle('❌ 尚未登入にゃ')
+                    .setDescription('請先使用 `/maimai-login` 登入你的 SEGA 帳號にゃ～')
+                    .setTimestamp();
+                return interaction.editReply({ embeds: [embed] });
+            }
         }
 
         console.log(`[maimai-record] 用戶 ${userId} 已登入，取得 Session`);
