@@ -5,7 +5,7 @@ const { URL } = require('url');
 const querystring = require('querystring');
 
 const MAIMAI_BASE_URL_INT = 'https://maimaidx-eng.com/maimai-mobile/';
-const MAIMAI_BASE_URL_JP  = 'https://maimaidx.jp/maimai-mobile/';
+const MAIMAI_BASE_URL_JP = 'https://maimaidx.jp/maimai-mobile/';
 const SEGA_AUTH_HOST = 'lng-tgk-aime-gw.am-all.net';
 const SEGA_AUTH_PATH = '/common_auth/login';
 const SEGA_AUTH_POST_PATH = '/common_auth/login/sid';
@@ -361,7 +361,11 @@ class MaimaiSession {
 
                 // 步驟 5 (JP)：驗證登入狀態
                 console.log(`[MaimaiSession][JP] 步驟 5: 驗證登入狀態にゃ…`);
-                const verifyRes = await this._get(this._baseUrl);
+
+                // 👇 將原本的 this._baseUrl 改成下面這兩行
+                const verifyUrl = new URL('home/', this._baseUrl).toString();
+                const verifyRes = await this._get(verifyUrl);
+
                 console.log(`[MaimaiSession][JP] 驗證結果: statusCode=${verifyRes.statusCode}, finalUrl=${verifyRes.finalUrl}, bodyLength=${verifyRes.body.length}`);
                 console.log(`[MaimaiSession][JP] 是否仍為登入頁: ${isSegaLoginPage(verifyRes.body, verifyRes.finalUrl) || isJPLoginPage(verifyRes.body)}`);
                 console.log(`[MaimaiSession][JP] 是否為 Aime 選卡頁: ${isAimeListPage(verifyRes.body, verifyRes.finalUrl)}`);
@@ -547,4 +551,4 @@ class MaimaiSession {
 module.exports = new MaimaiSession(MAIMAI_BASE_URL_INT);
 module.exports.MaimaiSession = MaimaiSession;
 module.exports.MAIMAI_BASE_URL_INT = MAIMAI_BASE_URL_INT;
-module.exports.MAIMAI_BASE_URL_JP  = MAIMAI_BASE_URL_JP;
+module.exports.MAIMAI_BASE_URL_JP = MAIMAI_BASE_URL_JP;
