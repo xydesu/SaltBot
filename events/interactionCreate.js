@@ -346,6 +346,107 @@ module.exports = {
                 return interaction.editReply({ embeds: [embed], components: [row] });
             }
 
+            // maimai DX Widget 同步按鈕處理
+            if (interaction.customId.startsWith('maimai_widget_sync_')) {
+                const targetUserId = interaction.customId.replace('maimai_widget_sync_', '');
+                if (interaction.user.id !== targetUserId) {
+                    return interaction.reply({ content: '❌ 這不是你的按鈕にゃ！', ephemeral: true });
+                }
+
+                await interaction.deferReply({ ephemeral: true });
+
+                const userSessions = require('../utils/userSessions');
+                const widgetCommand = require('../commands/maimai/maimai-widget.js');
+                const server = userSessions.getServer(targetUserId);
+
+                if (!userSessions.isLoggedIn(targetUserId)) {
+                    return interaction.editReply({ content: '❌ 你尚未登入，請使用 `/maimai-login` 重新登入以進行同步にゃ！' });
+                }
+
+                const session = userSessions.getSession(targetUserId);
+
+                try {
+                    console.log(`[maimai-widget-sync] 正在為用戶 ${targetUserId} 請求玩家資料...`);
+                    const res = await session.authenticatedGet('playerData/');
+                    if (res.statusCode !== 200) {
+                        return interaction.editReply({ content: `❌ 無法取得玩家資料，伺服器回應了狀態碼：\`${res.statusCode}\`にゃ` });
+                    }
+
+                    const playerData = widgetCommand.parsePlayerData(res.body);
+                    console.log(`[maimai-widget-sync] 解析完成，開始同步至 Discord Widget Profile...`);
+                    
+                    await widgetCommand.syncWidget(targetUserId, playerData, server, interaction.client);
+
+                    console.log(`[maimai-widget-sync] 用戶 ${targetUserId} 同步成功！`);
+                    return interaction.editReply({ content: '✅ maimai DX 資料已成功同步至你的 Discord Profile Widget 了にゃ！🎉' });
+                } catch (error) {
+                    console.error('[maimai-widget-sync] 同步時發生錯誤:', error);
+                    let errMsg = error.message;
+                    let isScopeError = false;
+                    
+                    if (error.response && error.response.data) {
+                        errMsg = JSON.stringify(error.response.data);
+                        if (error.response.data.code === 50026 || (error.response.data.message && error.response.data.message.includes('OAuth2 scope'))) {
+                            isScopeError = true;
+                        }
+                    }
+
+                    if (isScopeError) {
+                        return interaction.editReply({
+                            content: `❌ 同步失敗にゃ！錯誤原因：\`Missing required OAuth2 scope (50026)\`\n\n` +
+                                     `**💡 解決方法：**\n` +
+                                     `1. 請確認您已點擊 **「授權 Widget」** 按鈕並在開啟的網頁中完成授權。\n` +
+                                     `2. 若授權時出現 \`invalid_scope\` 或是此處顯示 50026，這是因為您尚未啟用該應用的 Social SDK。請至 **Discord Developer Portal** ➜ 選擇您的應用 ➜ 點入左側選單的 **Games ➜ Social SDK** 填寫並提交表單（這會立即獲得權限），之後重新點擊「授權 Widget」進行授權即可にゃ～`
+                        });
+                    }
+                    
+                    return interaction.editReply({ content: `❌ 同步失敗にゃ！錯誤原因：\`${errMsg}\`\n請確認你是否已經點擊過「授權 Widget」按鈕同意授權にゃ～` });
+                }
+            }
+
+            // maimai DX Widget 客戶端輔助腳本按鈕處理
+            if (interaction.customId.startsWith('maimai_widget_script_')) {
+                const targetUserId = interaction.customId.replace('maimai_widget_script_', '');
+                if (interaction.user.id !== targetUserId) {
+                    return interaction.reply({ content: '❌ 這不是你的按鈕にゃ！', ephemeral: true });
+                }
+
+                const { EmbedBuilder } = require('discord.js');
+                const clientId = process.env.CLIENT_ID;
+                const scriptText = `let _mods=webpackChunkdiscord_app.push([[Symbol()],{},e=>e.c]);webpackChunkdiscord_app.pop();
+let findByProps=(...e)=>{for(let t of Object.values(_mods))try{if(!t.exports||t.exports===window)continue;if(e.every(e=>t.exports?.[e]))return t.exports;for(let r in t.exports)if(e.every(e=>t.exports?.[r]?.[e])&&"IntlMessagesProxy"!==t.exports[r][Symbol.toStringTag])return t.exports[r]}catch{}};
+
+api = findByProps("Bo", "Cu").Bo
+async function addWidget(appId) {
+    id = findByProps("getCurrentUser").getCurrentUser().id;
+    current_widgets = (await api.get("/users/" + id + "/profile")).body.widgets
+    if (current_widgets.map(x=>x.data?.application_id).includes(appId)) {return console.log("Already in your widgets — remove it via Discord client to re-add")}
+    current_widgets.unshift({"data": {"type": "application","application_id": appId}})
+    await api.put({url: "/users/@me/widgets",body:{widgets: current_widgets}})
+}
+addWidget("${clientId}")`;
+
+                const embed = new EmbedBuilder()
+                    .setColor(0xF1C40F)
+                    .setTitle('🛠️ Discord 檔案手動新增 Widget 說明にゃ')
+                    .setDescription(
+                        '如果同步成功後，你的個人檔案連線中仍未出現 maimai DX 小工具，請依以下步驟手動新增：\n\n' +
+                        '**💡 操作步驟：**\n' +
+                        '1. 請在電腦上開啟 **網頁版 Discord** (https://discord.com/app)。\n' +
+                        '2. 按下鍵盤的 **`F12`** 或 **`Ctrl + Shift + I`**，切換到 **「主控台」(Console)** 頁籤。\n' +
+                        '3. 複製並貼上最下方的程式碼後按下 **`Enter`** 執行。\n' +
+                        '4. 回到 Discord 個人資料頁面即可看到本應用的小工具已經成功掛載にゃ！\n\n' +
+                        '**⚠️ 注意事項：**\n' +
+                        '-# 執行前請確保您了解程式碼內容以策安全，此腳本僅用於向您的個人檔案清單加入本應用的 Widget 元件。'
+                    )
+                    .addFields({
+                        name: '📋 複製以下程式碼執行：',
+                        value: `\`\`\`javascript\n${scriptText}\n\`\`\``
+                    });
+
+                return interaction.reply({ embeds: [embed], ephemeral: true });
+            }
+
             console.log(`按鈕被點擊: ${interaction.customId}`);
         }
         
