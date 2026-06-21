@@ -1,5 +1,7 @@
 # 🐾 Salt Bot - maimai DX Discord Bot
 
+[![Docker Build and Publish](https://github.com/xydesu/SaltBot/actions/workflows/docker-build.yml/badge.svg)](https://github.com/xydesu/SaltBot/actions/workflows/docker-build.yml)
+
 > 一個以 maimai DX 中 Salt 角色為主題的可愛 Discord 機器人にゃ～
 
 ## ✨ 特色功能
@@ -121,6 +123,37 @@ node deploy-commands.js
 ```bash
 npm start
 ```
+
+## Docker 部署
+
+我們提供了預先建置好的 Docker 映像檔，讓您可以快速部署。
+
+### 方法一：使用預建置映像檔 (推薦)
+
+1. 建立 `.env` 檔案並填入您的機器人資訊（可參考專案中的 `.env.example`）。
+2. 執行以下指令拉取映像檔並啟動容器：
+```bash
+docker run -d --name saltbot --env-file .env ghcr.io/xydesu/saltbot:latest
+```
+
+### 方法二：自行建置映像檔
+
+如果您想要自行修改原始碼並建置：
+
+1. 複製專案：
+```bash
+git clone https://github.com/xydesu/SaltBot.git
+cd SaltBot
+```
+2. 設定環境變數（複製 `.env.example` 為 `.env` 並填寫資訊）。
+3. 建置並啟動容器：
+```bash
+docker build -t saltbot .
+docker run -d --name saltbot --env-file .env saltbot
+```
+
+> **注意：** 無論使用哪種方式部署，若需要註冊斜線指令，您可以進入容器內部執行：
+> `docker exec -it saltbot node deploy-commands.js`
 
 ## 開發模式
 
