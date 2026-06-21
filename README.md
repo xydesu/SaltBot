@@ -122,6 +122,30 @@ node deploy-commands.js
 npm start
 ```
 
+## Docker 部署
+
+如果你想使用 Docker 快速部署機器人，請依照以下步驟：
+
+### 1. 複製專案
+```bash
+git clone https://github.com/xydesu/SaltBot.git
+cd SaltBot
+```
+
+### 2. 設定環境變數
+1. 複製 `.env.example` 並重新命名為 `.env`
+2. 填入您的機器人資訊。
+
+### 3. 部署與啟動
+在專案根目錄下，執行以下命令建立並啟動 Docker 容器：
+```bash
+docker build -t saltbot .
+docker run -d --name saltbot --env-file .env saltbot
+```
+
+> **注意：** 使用 Docker 部署時，若需要註冊斜線指令，您可以進入容器內部執行：
+> `docker exec -it saltbot node deploy-commands.js`
+
 ## 開發模式
 
 使用 Node.js 的 watch 模式進行開發：
