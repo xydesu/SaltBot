@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, AttachmentBuilder, ApplicationIntegrationType, InteractionContextType } = require('discord.js');
+const { SlashCommandBuilder, AttachmentBuilder, ApplicationIntegrationType, InteractionContextType, MessageFlags } = require('discord.js');
 const axios = require('axios');
 const { createCanvas, loadImage, registerFont } = require('canvas');
 const fs = require('fs');
@@ -111,11 +111,12 @@ module.exports = {
             if (rankingData.update) {
                 replyContent += `⏰ 官方更新時間: \`${rankingData.update}\`\n`;
             }
-            replyContent += `🔗 [查看官方排行榜網頁](${officialUrl})`;
+            replyContent += `🔗 [查看官方排行榜網頁](<${officialUrl}>)`;
 
             await interaction.editReply({
                 content: replyContent,
-                files: [attachment]
+                files: [attachment],
+                flags: MessageFlags.SuppressEmbeds
             });
 
         } catch (error) {
