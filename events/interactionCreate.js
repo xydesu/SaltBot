@@ -367,7 +367,7 @@ module.exports = {
 
                 try {
                     console.log(`[maimai-widget-sync] 正在為用戶 ${targetUserId} 請求玩家資料...`);
-                    const res = await session.authenticatedGet('playerData/');
+                    const res = await session.authenticatedGet('home/');
                     if (res.statusCode !== 200) {
                         return interaction.editReply({ content: `❌ 無法取得玩家資料，伺服器回應了狀態碼：\`${res.statusCode}\`にゃ` });
                     }
@@ -375,10 +375,14 @@ module.exports = {
                     const playerData = widgetCommand.parsePlayerData(res.body);
                     console.log(`[maimai-widget-sync] 解析完成，開始同步至 Discord Widget Profile...`);
                     
-                    await widgetCommand.syncWidget(targetUserId, playerData, server, interaction.client);
+                    const syncResult = await widgetCommand.syncWidget(targetUserId, playerData, server, interaction.client);
 
                     console.log(`[maimai-widget-sync] 用戶 ${targetUserId} 同步成功！`);
-                    return interaction.editReply({ content: '✅ maimai DX 資料已成功同步至你的 Discord Profile Widget 了にゃ！🎉' });
+                    let replyText = '✅ maimai DX 資料已成功同步至你的 Discord Profile Widget 了にゃ！🎉';
+                    if (syncResult?.uploadWarning) {
+                        replyText += `\n⚠️ **頭像提醒**：${syncResult.uploadWarning}`;
+                    }
+                    return interaction.editReply({ content: replyText });
                 } catch (error) {
                     console.error('[maimai-widget-sync] 同步時發生錯誤:', error);
                     let errMsg = error.message;

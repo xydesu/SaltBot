@@ -10,6 +10,7 @@ const {
 const userSessions = require('../../utils/userSessions');
 const axios = require('axios');
 const https = require('https');
+const http = require('http');
 const { URL } = require('url');
 
 /**
@@ -23,26 +24,89 @@ function downloadMaimaiAvatar(session, avatarPath, server) {
     return new Promise((resolve, reject) => {
         const isJP = server === 'JP';
         const baseUrl = isJP ? 'https://maimaidx.jp/maimai-mobile/' : 'https://maimaidx-eng.com/maimai-mobile/';
-        const url = new URL(avatarPath, baseUrl).toString();
+        const initialUrl = new URL(avatarPath, baseUrl).toString();
 
         const headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Referer': baseUrl + 'home/',
             'Cookie': session._cookieHeader()
         };
 
-        https.get(url, { headers }, (res) => {
-            if (res.statusCode !== 200) {
-                return reject(new Error(`下載圖片失敗，狀態碼: ${res.statusCode}`));
+        const fetchWithRedirects = (currentUrl, redirectsLeft = 5) => {
+            if (redirectsLeft <= 0) {
+                return reject(new Error('下載頭像超過重定向次數上限'));
             }
 
-            const chunks = [];
-            res.on('data', chunk => chunks.push(chunk));
-            res.on('end', () => {
-                resolve(Buffer.concat(chunks));
-            });
-            res.on('error', err => reject(err));
-        }).on('error', err => reject(err));
+            const parsed = new URL(currentUrl);
+            const lib = parsed.protocol === 'https:' ? https : http;
+
+            lib.get(currentUrl, { headers }, (res) => {
+                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                    const redirectUrl = new URL(res.headers.location, currentUrl).toString();
+                    return fetchWithRedirects(redirectUrl, redirectsLeft - 1);
+                }
+
+                if (res.statusCode !== 200) {
+                    return reject(new Error(`下載圖片失敗，狀態碼: ${res.statusCode}`));
+                }
+
+                const chunks = [];
+                res.on('data', chunk => chunks.push(chunk));
+                res.on('end', () => {
+                    resolve(Buffer.concat(chunks));
+                });
+                res.on('error', err => reject(err));
+            }).on('error', err => reject(err));
+        };
+
+        fetchWithRedirects(initialUrl);
     });
+}
+
+/**
+ * 上傳圖片至公開圖床以供 Discord Widget 讀取
+ * 支援 ImgBB (若提供 IMGBB_API_KEY) 與 Catbox
+ * @param {Buffer} buffer
+ * @param {string} userId
+ * @returns {Promise<string|null>}
+ */
+async function uploadToImageHost(buffer, userId) {
+    // 1. 優先嘗試 ImgBB (若環境變數已設定 IMGBB_API_KEY，永久穩定)
+    if (process.env.IMGBB_API_KEY) {
+        try {
+            console.log('[maimai-widget] 正在使用 ImgBB 上傳頭像...');
+            const formData = new FormData();
+            formData.append('image', buffer.toString('base64'));
+            formData.append('name', `avatar_${userId}`);
+            const res = await axios.post(`https://api.imgbb.com/1/upload?key=${process.env.IMGBB_API_KEY}`, formData, { timeout: 15000 });
+            if (res.data?.data?.url) {
+                console.log(`[maimai-widget] 頭像成功託管至 ImgBB: ${res.data.data.url}`);
+                return res.data.data.url;
+            }
+        } catch (err) {
+            console.error('[maimai-widget] ImgBB 上傳失敗:', err.response?.data?.error?.message || err.message);
+        }
+    }
+
+    // 2. 嘗試 Catbox 主站
+    try {
+        console.log('[maimai-widget] 嘗試上傳至 Catbox 主站...');
+        const formData = new FormData();
+        formData.append('reqtype', 'fileupload');
+        const blob = new Blob([buffer], { type: 'image/png' });
+        formData.append('fileToUpload', blob, `avatar_${userId}.png`);
+
+        const uploadRes = await axios.post('https://catbox.moe/user/api.php', formData, { timeout: 15000 });
+        if (typeof uploadRes.data === 'string' && uploadRes.data.startsWith('http')) {
+            const url = uploadRes.data.trim();
+            console.log(`[maimai-widget] 頭像成功託管至 Catbox: ${url}`);
+            return url;
+        }
+    } catch (err) {
+        console.error('[maimai-widget] Catbox 上傳失敗:', err.response?.data || err.message);
+    }
+
+    return null;
 }
 
 // ── 伺服器標籤 ──────────────────────────────────────────────
@@ -168,8 +232,9 @@ function parsePlayerData(html) {
         || html.match(/×([\d,]+)<\/div>/i);
     if (starMatch) data.stars = starMatch[1].replace(/,/g, '');
 
-    // 頭像 (avatar)
-    const avatarMatch = html.match(/<img[^>]+src="([^"]*img\/[iI]con\/[^"]+)"/i)
+    // 頭像 (avatar) - 優先擷取角色圖片 (Chara)，若無則 fallback 至圖示 (Icon)
+    const avatarMatch = html.match(/<img[^>]+src="([^"]*img\/Chara\/[^"]+)"/i)
+        || html.match(/<img[^>]+src="([^"]*img\/[iI]con\/[^"]+)"/i)
         || html.match(/class="w_112[^"]*"[^>]+src="([^"]+)"/i);
     if (avatarMatch) data.avatar = avatarMatch[1];
 
@@ -188,36 +253,57 @@ function parsePlayerData(html) {
  * @param {object} [client] Discord Client 實例
  */
 async function syncWidget(userId, playerData, server, client) {
-    const isJP = server === 'JP';
-    const baseUrl = isJP ? 'https://maimaidx.jp/maimai-mobile/' : 'https://maimaidx-eng.com/maimai-mobile/';
-    
-    let avatarUrl = playerData.avatar;
-    if (avatarUrl && !avatarUrl.startsWith('http')) {
-        avatarUrl = new URL(avatarUrl, baseUrl).toString();
+    let avatarUrl = null;
+    let uploadWarning = null;
+
+    const clientId = process.env.CLIENT_ID;
+    const token = process.env.DISCORD_TOKEN;
+    const url = `https://discord.com/api/v9/applications/${clientId}/users/${userId}/identities/0/profile`;
+
+    // 嘗試取得現有 Profile 的圖床 URL 作為備援快取
+    let existingAvatarUrl = null;
+    try {
+        const currentProfile = await axios.get(url, {
+            headers: { 'Authorization': `Bot ${token}` },
+            timeout: 5000
+        });
+        const currentRankImage = currentProfile.data?.data?.primary?.rank_image?.url;
+        const currentDynamicAvatar = currentProfile.data?.data?.dynamic?.find(x => x.name === 'avatar')?.value?.url;
+        const candidate = currentRankImage || currentDynamicAvatar;
+        if (candidate && (candidate.includes('catbox.moe') || candidate.includes('ibb.co') || candidate.includes('imgur.com'))) {
+            existingAvatarUrl = candidate;
+        }
+    } catch {
+        // 忽略取得現有資料的錯誤
     }
 
-    // 將頭像下載並上傳至永久免登入圖床 Catbox，以供 Discord Widget 公開且永久讀取
+    // 將頭像下載並上傳至公開圖床，以供 Discord Widget 公開讀取
     if (playerData.avatar) {
         try {
             const session = userSessions.getSession(userId);
             if (session && typeof session._cookieHeader === 'function') {
-                console.log('[maimai-widget] 開始下載頭像並上傳至 Catbox...');
+                console.log('[maimai-widget] 開始下載頭像...');
                 const avatarBuffer = await downloadMaimaiAvatar(session, playerData.avatar, server);
-                
-                const formData = new FormData();
-                formData.append('reqtype', 'fileupload');
-                const blob = new Blob([avatarBuffer], { type: 'image/png' });
-                formData.append('fileToUpload', blob, `avatar_${userId}.png`);
-
-                const uploadRes = await axios.post('https://catbox.moe/user/api.php', formData);
-                if (uploadRes.data && uploadRes.data.startsWith('http')) {
-                    avatarUrl = uploadRes.data.trim();
-                    console.log(`[maimai-widget] 頭像成功託管至 Catbox: ${avatarUrl}`);
+                const uploadedUrl = await uploadToImageHost(avatarBuffer, userId);
+                if (uploadedUrl) {
+                    avatarUrl = uploadedUrl;
+                } else if (existingAvatarUrl) {
+                    console.log(`[maimai-widget] 圖床暫時無法上傳新圖，沿用現有有效圖床 URL: ${existingAvatarUrl}`);
+                    avatarUrl = existingAvatarUrl;
+                } else {
+                    uploadWarning = '圖床暫時無法連線（Catbox 目前暫停上傳服務）。建議在 .env 中設定 IMGBB_API_KEY 以確保永久穩定託管頭像にゃ～';
                 }
             }
         } catch (err) {
-            console.error('[maimai-widget] 頭像上傳至 Catbox 失敗 (使用 fallback):', err.message);
+            console.error('[maimai-widget] 下載或上傳頭像時發生錯誤:', err.message);
+            if (existingAvatarUrl) {
+                avatarUrl = existingAvatarUrl;
+            } else {
+                uploadWarning = `取得頭像失敗: ${err.message}`;
+            }
         }
+    } else if (existingAvatarUrl) {
+        avatarUrl = existingAvatarUrl;
     }
 
     const dynamicData = [
@@ -231,27 +317,30 @@ async function syncWidget(userId, playerData, server, client) {
         { type: 1, name: 'rating_mini', value: playerData.rating ? `Rating: ${playerData.rating}` : 'Rating: 0' }
     ];
 
+    let mediaObject = null;
     if (avatarUrl) {
-        dynamicData.unshift({
-            type: 3,
-            name: 'avatar',
-            value: {
-                url: avatarUrl
-            }
-        });
+        mediaObject = { url: avatarUrl };
+        // 同時提供常見的圖片變數名稱別名，確保無論 Discord Developer Portal 綁定哪一個 key 都能成功顯示
+        const imageAliases = ['avatar', 'Avatar', 'icon', 'Icon', 'image', 'Image', 'chara', 'Chara', 'rank_image'];
+        for (const alias of imageAliases) {
+            dynamicData.push({
+                type: 3,
+                name: alias,
+                value: mediaObject
+            });
+        }
     }
 
     const payload = {
         username: playerData.name || 'maimai DX Player',
         data: {
+            primary: {
+                rank_name: playerData.classRank || playerData.dans || 'Not set',
+                ...(mediaObject ? { rank_image: mediaObject } : {})
+            },
             dynamic: dynamicData
         }
     };
-
-    const clientId = process.env.CLIENT_ID;
-    const token = process.env.DISCORD_TOKEN;
-    // 用戶目前為個人單一使用，固定為 0 避免 provider_issued_user_id 不符錯誤
-    const url = `https://discord.com/api/v9/applications/${clientId}/users/${userId}/identities/0/profile`;
 
     console.log(`[maimai-widget] 同步 API 請求: ${url}`);
     
@@ -263,7 +352,7 @@ async function syncWidget(userId, playerData, server, client) {
             }
         });
 
-        return response.data;
+        return { data: response.data, avatarUrl, uploadWarning };
     } catch (error) {
         // ── 精準捕捉 Discord API 錯誤 ────────────────────────────
         if (error.response && error.response.data) {
